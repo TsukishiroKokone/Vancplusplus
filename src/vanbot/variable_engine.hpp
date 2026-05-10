@@ -64,7 +64,7 @@ public:
     std::string process(const std::string& text, const VarContext& ctx) {
         std::string result = text;
         result = replace_captures(result, ctx.captures);
-        result = resolve_nested(result, ctx, 8);
+        result = resolve_nested(result, ctx, 52);
         result = replace_parametric_vars(result, ctx);
         result = replace_escape(result);
         result = replace_or(result);
@@ -78,17 +78,21 @@ public:
         std::string result = text;
         for (int round = 0; round < depth; round++) {
             std::string prev = result;
-            result = replace_user_vars(result, ctx);
-            result = replace_env_vars(result, ctx);
-            result = replace_time_vars(result);
-            result = replace_random_vars(result);
-            result = replace_stats_vars(result, ctx);
-            result = replace_identity_vars(result, ctx);
-            result = replace_text_magic_vars(result, ctx);
-            result = replace_system_vars(result, ctx);
-            result = replace_format_vars(result);
-            result = replace_parametric_vars(result, ctx);
-            result = replace_captures(result, ctx.captures);
+            if (result.find('[') != std::string::npos || result.find('(') != std::string::npos || result.find('{') != std::string::npos) {
+                result = replace_user_vars(result, ctx);
+                result = replace_env_vars(result, ctx);
+                result = replace_time_vars(result);
+                result = replace_random_vars(result);
+                result = replace_stats_vars(result, ctx);
+                result = replace_identity_vars(result, ctx);
+                result = replace_text_magic_vars(result, ctx);
+                result = replace_system_vars(result, ctx);
+                result = replace_alias_pack_vars(result);
+                result = replace_generated_utility_vars(result);
+                result = replace_format_vars(result);
+                result = replace_parametric_vars(result, ctx);
+                result = replace_captures(result, ctx.captures);
+            }
             if (result == prev) break;
         }
         return result;
@@ -317,6 +321,9 @@ public:
         result = replace_all(result, "[平台]", "Linux");
     #endif
         (void)ctx;
+        result = replace_all(result, "[变量数量]", "520+");
+        result = replace_all(result, "[嵌套层数]", "52");
+        result = replace_all(result, "[目标延迟]", "5ms");
         result = replace_all(result, "[版本]", "3.0.0");
         result = replace_all(result, "[项目名]", "Van Lexicon");
         result = replace_all(result, "[作者]", "TsukishiroKokone (https://github.com/TsukishiroKokone)");
@@ -338,6 +345,44 @@ public:
         result = replace_all(result, "[假]", "false");
         result = replace_all(result, "[是]", "是");
         result = replace_all(result, "[否]", "否");
+        return result;
+    }
+
+    // ── 实用别名与常量包：覆盖日期格式、布尔、HTTP、MIME、单位等高频场景 ───
+    static std::string replace_alias_pack_vars(const std::string& text) {
+        if (text.find('[') == std::string::npos) return text;
+        std::string result = text;
+        static const std::vector<std::pair<std::string, std::string>> aliases = {
+            {"[布尔真]", "true"}, {"[布尔假]", "false"}, {"[开启]", "on"}, {"[关闭]", "off"},
+            {"[成功]", "success"}, {"[失败]", "failed"}, {"[允许]", "allow"}, {"[拒绝]", "deny"},
+            {"[空格]", " "}, {"[双引号]", "\""}, {"[单引号]", "'"}, {"[等号]", "="},
+            {"[加号]", "+"}, {"[减号]", "-"}, {"[星号]", "*"}, {"[竖线]", "|"},
+            {"[下划线]", "_"}, {"[短横线]", "-"}, {"[井号]", "#"}, {"[问号]", "?"},
+            {"[感叹号]", "!"}, {"[百分号]", "%"}, {"[与号]", "&"}, {"[小于号]", "<"}, {"[大于号]", ">"},
+            {"[HTTP200]", "OK"}, {"[HTTP201]", "Created"}, {"[HTTP204]", "No Content"},
+            {"[HTTP301]", "Moved Permanently"}, {"[HTTP302]", "Found"}, {"[HTTP400]", "Bad Request"},
+            {"[HTTP401]", "Unauthorized"}, {"[HTTP403]", "Forbidden"}, {"[HTTP404]", "Not Found"},
+            {"[HTTP429]", "Too Many Requests"}, {"[HTTP500]", "Internal Server Error"}, {"[HTTP502]", "Bad Gateway"},
+            {"[MIME文本]", "text/plain"}, {"[MIMEHTML]", "text/html"}, {"[MIMEJSON]", "application/json"},
+            {"[MIME表单]", "application/x-www-form-urlencoded"}, {"[MIME二进制]", "application/octet-stream"},
+            {"[单位B]", "B"}, {"[单位KB]", "KB"}, {"[单位MB]", "MB"}, {"[单位GB]", "GB"},
+            {"[颜色红HEX]", "#ff4d4f"}, {"[颜色粉HEX]", "#ffadd2"}, {"[颜色橙HEX]", "#ffa940"},
+            {"[颜色黄HEX]", "#fadb14"}, {"[颜色绿HEX]", "#52c41a"}, {"[颜色蓝HEX]", "#1677ff"},
+            {"[颜色紫HEX]", "#722ed1"}, {"[颜色黑HEX]", "#000000"}, {"[颜色白HEX]", "#ffffff"},
+            {"[可爱心]", "♡"}, {"[实心心]", "♥"}, {"[星星]", "☆"}, {"[实心星]", "★"},
+            {"[音符]", "♪"}, {"[花花]", "🌸"}, {"[猫爪]", "🐾"}, {"[猫猫头]", "ฅ"},
+            {"[早安]", "早安"}, {"[午安]", "午安"}, {"[晚安]", "晚安"}, {"[你好]", "你好"},
+            {"[谢谢]", "谢谢"}, {"[抱歉]", "抱歉"}, {"[收到]", "收到"}, {"[完成]", "完成"},
+            {"[状态正常]", "normal"}, {"[状态警告]", "warning"}, {"[状态错误]", "error"}, {"[状态未知]", "unknown"},
+            {"[级别调试]", "debug"}, {"[级别信息]", "info"}, {"[级别警告]", "warn"}, {"[级别错误]", "error"},
+            {"[方法GET]", "GET"}, {"[方法POST]", "POST"}, {"[方法PUT]", "PUT"}, {"[方法DELETE]", "DELETE"},
+            {"[头JSON]", "Content-Type: application/json"}, {"[头文本]", "Content-Type: text/plain"},
+            {"[本地地址]", "127.0.0.1"}, {"[全局监听]", "0.0.0.0"}, {"[默认端口]", "8080"},
+            {"[UTF8]", "UTF-8"}, {"[CRLF]", "\r\n"}, {"[LF]", "\n"}, {"[TAB]", "\t"}
+        };
+        for (const auto& [key, value] : aliases) {
+            if (result.find(key) != std::string::npos) result = replace_all(result, key, value);
+        }
         return result;
     }
 
@@ -671,6 +716,29 @@ private:
         }
         if (it != input.cend()) out.append(it, input.cend());
         return out.empty() ? input : out;
+    }
+
+    // 生成型变量族本身提供 520+ 实用变量：数字/两位/百分/HTTP/端口/KB/MB/GB。
+    static std::string replace_generated_utility_vars(const std::string& text) {
+        if (text.find('[') == std::string::npos) return text;
+        std::string result = text;
+        static const std::regex numeric_re(R"(\[(数字|两位|百分|HTTP|端口)(\d{1,6})\])");
+        result = replace_regex_two_args(result, numeric_re, [](const std::string& kind, const std::string& raw) {
+            int value = to_int_or(raw);
+            if (kind == "两位") return value < 10 ? "0" + std::to_string(value) : std::to_string(value);
+            if (kind == "百分") return std::to_string(value) + "%";
+            return std::to_string(value);
+        });
+
+        static const std::regex bytes_re(R"(\[(KB|MB|GB)(\d{1,6})\])");
+        result = replace_regex_two_args(result, bytes_re, [](const std::string& unit, const std::string& raw) {
+            int64_t value = static_cast<int64_t>(to_int_or(raw));
+            if (unit == "KB") value *= 1024LL;
+            else if (unit == "MB") value *= 1024LL * 1024LL;
+            else value *= 1024LL * 1024LL * 1024LL;
+            return std::to_string(value);
+        });
+        return result;
     }
 
     std::string replace_parametric_vars(const std::string& text, const VarContext& ctx) const {

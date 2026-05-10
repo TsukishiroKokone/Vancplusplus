@@ -27,8 +27,8 @@
 ### Function List
 - [x] Van Lexicon Basic Function -> https://github.com/Van-Zone/VanBot
 - [x] Multi-Adapter Architecture (Multiple bots simultaneously)
-- [x] Nested Variable System (Up to 8 levels of recursion)
-- [x] 100+ Built-in Variables ([VARIABLES.md](VARIABLES.md))
+- [x] Nested Variable System (Up to 52 levels of recursion)
+- [x] 520+ Useful Built-in Variables / Generated Variable Families ([VARIABLES.md](VARIABLES.md))
 - [x] Cooldown System
 - [x] Virtual Coins System
 - [x] HTTP GET Variable with LRU Cache
@@ -208,7 +208,7 @@ Web API routes:
 
 ## 🧩 Nested Variable System
 
-Variables can be nested within each other. The system resolves them in multiple passes (up to 8 rounds):
+Variables can be nested within each other. The system resolves them in multiple passes (up to 52 rounds):
 
 ```
 [积分.0.[n.1]]          → First resolve [n.1] → Then resolve 积分
@@ -221,7 +221,7 @@ Variables can be nested within each other. The system resolves them in multiple 
 
 ## 📋 Built-in Variables
 
-完整变量文档请看 [VARIABLES.md](VARIABLES.md)。
+完整变量文档请看 [VARIABLES.md](VARIABLES.md)。当前提供 520+ 实用变量/生成型变量族，非 HTTP 请求变量目标解析延迟为 5ms 以内。
 
 ### 👤 User Info
 | Variable | Description |
@@ -327,7 +327,7 @@ src/
     ├── common.hpp              # Core Types (Event, Config, AdapterType, AdapterConfig)
     ├── storage.hpp / .cpp      # Thread-safe File Storage (shared_mutex)
     ├── lexicon_engine.hpp/.cpp # Lexicon Engine (CRUD + [n.?] Matching)
-    ├── variable_engine.hpp     # Nested Variable Engine (100+ Variables, 8-level Recursion)
+    ├── variable_engine.hpp     # Nested Variable Engine (520+ Variables, 52-level Recursion)
     ├── variable_engine.cpp     # Variable Engine Extension
     ├── onebot_adapter.hpp      # Multi-Protocol Adapter (BotConnection + AdapterManager)
     ├── onebot_adapter.cpp      # Adapter Extension
