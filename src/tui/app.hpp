@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 TsukishiroKokone
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 #pragma once
 // ─── VanBot Cute TUI ────────────────────────────────────────
 // 可爱系终端界面：樱花粉 + 薄荷绿 配色

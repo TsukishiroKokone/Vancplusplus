@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 TsukishiroKokone
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 #pragma once
 // ─── VanBot Fun Plugins ──────────────────────────────────────
 // ZeroBot-plugin 风格趣味功能：签到 / 今日运势 / 抽签 / 塔罗 / 骰子 / 硬币 / 老婆 / 戳一戳

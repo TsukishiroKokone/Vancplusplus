@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 TsukishiroKokone
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 #pragma once
 // ─── VanBot INI Configuration ─────────────────────────────────
 // 轻量 INI 配置读写：无需额外依赖，支持多适配器配置

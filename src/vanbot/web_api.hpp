@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 TsukishiroKokone
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 #pragma once
 // ─── VanBot Web API ───────────────────────────────────────────
 // 轻量 Web API：状态、配置、词库查询与新增词条

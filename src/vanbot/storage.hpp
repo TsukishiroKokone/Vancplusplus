@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 TsukishiroKokone
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 #pragma once
 // ─── VanBot Storage Layer ────────────────────────────────────
 // 高并发文件/SQLite 双后端数据持久化

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 TsukishiroKokone
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 cmake_minimum_required(VERSION 3.20)
 project(VanBot VERSION 3.0.0 LANGUAGES CXX)
 

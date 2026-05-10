@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 TsukishiroKokone
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // ─── VanBot Cute TUI Application ─────────────────────────────
 // 多适配器状态显示版本
 #include "app.hpp"

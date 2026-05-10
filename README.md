@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: 2026 TsukishiroKokone
+SPDX-License-Identifier: AGPL-3.0-or-later
+-->
+
 # Van Lexicon [This Version is Unofficial !!!]
 ### We're Very Thank for Van-Zone Organization All Developer!
 > 本项目使用 VanBot 词库，来源：[https://github.com/ZiYiQuQ/VanBot](https://github.com/ZiYiQuQ/VanBot)

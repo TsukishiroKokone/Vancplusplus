@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 TsukishiroKokone
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 #pragma once
 // ─── VanBot HTTP Client ─────────────────────────────────────
 // 异步 HTTP 请求 + 响应缓存

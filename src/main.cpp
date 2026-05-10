@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 TsukishiroKokone
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // ─── VanBot v3.0.0 - Main Entry ─────────────────────────────
 // 高性能 C++ QQ 关键词词库机器人
 // 多适配器架构：OneBot v11/v12 正向/反向WS + Milky协议

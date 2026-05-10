@@ -2,6 +2,7 @@
   "name": "vanbot",
   "version": "3.0.0",
   "description": "VanBot - High-performance QQ keyword bot in C++",
+  "license": "AGPL-3.0-or-later",
   "dependencies": [
     "ftxui",
     "nlohmann-json",

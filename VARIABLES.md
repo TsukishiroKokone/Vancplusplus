@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: 2026 TsukishiroKokone
+SPDX-License-Identifier: AGPL-3.0-or-later
+-->
+
 # Van Lexicon Variables
 
 > 本文档列出 Van Lexicon C++ 版内置变量。变量支持多轮嵌套解析，默认最多 52 轮。

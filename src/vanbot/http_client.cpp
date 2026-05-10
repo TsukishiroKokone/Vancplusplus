@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 TsukishiroKokone
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // ─── VanBot HTTP Client Implementation ───────────────────────
 #include "http_client.hpp"
 #include <httplib.h>

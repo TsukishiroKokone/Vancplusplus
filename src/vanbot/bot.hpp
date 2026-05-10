@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 TsukishiroKokone
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 #pragma once
 // ─── VanBot Core Bot ────────────────────────────────────────
 // 事件处理编排 + 消息解码/编码 + 请求转发

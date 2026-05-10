@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 TsukishiroKokone
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 #pragma once
 // ─── VanBot Lexicon Engine ───────────────────────────────────
 // 高性能词库匹配：AC自动机 + 正则占位符

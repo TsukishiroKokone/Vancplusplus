@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 TsukishiroKokone
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 #pragma once
 // ─── VanBot Multi-Protocol Adapter ──────────────────────────
 // 支持: OneBot v11/v12 正向WS / 反向WS / Milky 协议

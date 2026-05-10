@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 TsukishiroKokone
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 #pragma once
 // ─── VanBot Variable Engine v2 ──────────────────────────────
 // 嵌套变量系统 + 100+ 内置变量
