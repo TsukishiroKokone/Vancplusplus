@@ -28,8 +28,9 @@
 - [x] Van Lexicon Basic Function -> https://github.com/Van-Zone/VanBot
 - [x] Multi-Adapter Architecture (Multiple bots simultaneously)
 - [x] Nested Variable System (Up to 52 levels of recursion)
-- [x] 520+ Distinct Useful Variable Families ([VARIABLES.md](VARIABLES.md))
+- [x] 570+ Distinct Useful Variable Families ([VARIABLES.md](VARIABLES.md))
 - [x] Five 110+ Distinct Variable Species Categories (Parameterized Tools / User Events / Environment / Time / Random)
+- [x] ZeroBot-plugin Style Fun Plugins (Check-in / Fortune / Lottery / Tarot / Dice / Coin / Slot / Poke Reply)
 - [x] Cooldown System
 - [x] Virtual Coins System
 - [x] HTTP GET Variable with LRU Cache
@@ -42,6 +43,7 @@
 - [x] SQLite Database Support
 - [x] INI Configuration File
 - [x] Web API
+- [x] Built-in Fun Commands without Lexicon Rules
 
 ---
 
@@ -222,7 +224,11 @@ Variables can be nested within each other. The system resolves them in multiple 
 
 ## 📋 Built-in Variables
 
-完整变量文档请看 [VARIABLES.md](VARIABLES.md)。当前提供 520+ 个不同实用变量族（不是只靠生成实例计数），并且参数化工具族、用户与事件变量、环境变量、时间变量、随机变量五类均为 110+ 个不同种类（不是别名重复计数）。非 HTTP 请求变量目标解析延迟为 5ms 以内。
+完整变量文档请看 [VARIABLES.md](VARIABLES.md)。当前提供 570+ 个不同实用变量族（不是只靠生成实例计数），并且参数化工具族、用户与事件变量、环境变量、时间变量、随机变量五类均为 110+ 个不同种类（不是别名重复计数）。新增 ZeroBot-plugin 风格趣味变量与内置命令；非 HTTP 请求变量目标解析延迟为 5ms 以内。
+
+### 🎀 ZeroBot-plugin Style Fun Commands
+
+无需手写词库即可响应：`签到` / `打卡` / `今日运势` / `抽签` / `塔罗` / `骰子` / `D20` / `硬币` / `老虎机` / `今日老婆` / `菜单`，并支持戳一戳机器人时自动可爱回复。签到数据写入 `fun_plugins.json`，群聊签到奖励也会进入 `coins.json` 的 `sakura` 积分类型。
 
 ### 🔧 Parameterized Utility (110+ species)
 | Variable | Description |
@@ -336,7 +342,8 @@ src/
     ├── common.hpp              # Core Types (Event, Config, AdapterType, AdapterConfig)
     ├── storage.hpp / .cpp      # Thread-safe File Storage (shared_mutex)
     ├── lexicon_engine.hpp/.cpp # Lexicon Engine (CRUD + [n.?] Matching)
-    ├── variable_engine.hpp     # Nested Variable Engine (520+ Families + 5×110+ Species Categories, 52-level Recursion)
+    ├── variable_engine.hpp     # Nested Variable Engine (570+ Families + 5×110+ Species Categories, 52-level Recursion)
+    ├── fun_plugins.hpp         # ZeroBot-plugin Style Fun Commands
     ├── variable_engine.cpp     # Variable Engine Extension
     ├── onebot_adapter.hpp      # Multi-Protocol Adapter (BotConnection + AdapterManager)
     ├── onebot_adapter.cpp      # Adapter Extension

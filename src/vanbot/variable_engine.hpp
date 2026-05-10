@@ -89,6 +89,7 @@ public:
                 result = replace_text_magic_vars(result, ctx);
                 result = replace_system_vars(result, ctx);
                 result = replace_alias_pack_vars(result);
+                result = replace_fun_exact_vars(result, ctx);
                 result = replace_generated_utility_vars(result);
                 result = replace_format_vars(result);
                 result = replace_parametric_vars(result, ctx);
@@ -303,6 +304,45 @@ public:
     }
 
     // ── 系统变量 ─────────────────────────────────────────────
+    std::string replace_fun_exact_vars(const std::string& text, const VarContext& ctx) const {
+        if (text.find('[') == std::string::npos) return text;
+        auto today_seed = static_cast<uint64_t>(daily_number());
+        auto user_seed = static_cast<uint64_t>(ctx.event_user_id ? ctx.event_user_id : ctx.env_id);
+        std::unordered_map<std::string, std::string> m;
+        auto add = [&](const std::string& k, const std::string& v) { m.emplace(bracketed(k), v); };
+        const int score = 1 + static_cast<int>(stable_index(user_seed * 1315423911ULL + today_seed, 100));
+        const auto& colors = fun_colors();
+        const auto& advices = fun_advices();
+        const auto& tarot = fun_tarot_cards();
+        const auto& lots = fun_lottery_levels();
+        const auto& moods = fun_moods();
+        const auto& foods = fun_foods();
+        const auto& drinks = fun_drinks();
+        const auto& waifus = fun_waifus();
+        const auto& titles = fun_titles();
+        add("今日运势", std::to_string(score));
+        add("运势等级", fortune_level(score));
+        add("幸运颜色", colors[stable_index(user_seed + today_seed + 1, colors.size())]);
+        add("幸运数字", std::to_string(1 + stable_index(user_seed + today_seed + 2, 99)));
+        add("今日建议", advices[stable_index(user_seed + today_seed + 3, advices.size())]);
+        add("今日心情", moods[stable_index(user_seed + today_seed + 4, moods.size())]);
+        add("今日食物", foods[stable_index(user_seed + today_seed + 5, foods.size())]);
+        add("今日饮品", drinks[stable_index(user_seed + today_seed + 6, drinks.size())]);
+        add("今日老婆", waifus[stable_index(user_seed + today_seed + 7, waifus.size())]);
+        add("今日称号", titles[stable_index(user_seed + today_seed + 8, titles.size())]);
+        add("抽签", lots[stable_index(user_seed + static_cast<uint64_t>(std::time(nullptr)), lots.size())]);
+        add("塔罗牌", tarot[stable_index(user_seed + static_cast<uint64_t>(std::time(nullptr) / 3600), tarot.size())]);
+        add("骰子", std::to_string(1 + stable_index(user_seed + static_cast<uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count()), 6)));
+        add("硬币", stable_index(user_seed + static_cast<uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count()), 2) ? "反面" : "正面");
+        add("老虎机", slot_value(user_seed));
+        add("戳一戳回复", pick_fun(fun_poke_replies(), user_seed + today_seed));
+        add("随机老婆", pick_fun(waifus, user_seed + static_cast<uint64_t>(std::time(nullptr))));
+        add("随机称号", pick_fun(titles, user_seed + static_cast<uint64_t>(std::time(nullptr))));
+        add("随机梗", pick_fun(fun_memes(), user_seed + static_cast<uint64_t>(std::time(nullptr))));
+        add("随机台词", pick_fun(fun_quotes(), user_seed + static_cast<uint64_t>(std::time(nullptr))));
+        return scan_exact(text, m);
+    }
+
     static std::string replace_system_vars(const std::string& text, const VarContext& ctx) {
         std::string result = text;
     #ifdef _WIN32
@@ -1311,6 +1351,11 @@ private:
             add_prefixed_same("文件扩展", {"txt","md","json","yaml","yml","ini","csv","log","html","css","js","ts","cpp","hpp","c","h","py","java","go","rs","png","jpg","gif","webp","svg","pdf","zip","7z","tar","gz"});
             add_prefixed_same("协议名", {"HTTP","HTTPS","WS","WSS","TCP","UDP","DNS","SMTP","IMAP","POP3","SSH","SFTP","FTP","MQTT","AMQP","Redis","SQLite","OneBot11","OneBot12","Milky"});
             add_prefixed_same("配置键", {"data_dir","self_trigger","config_tui","storage_backend","sqlite_path","web_api_enabled","web_api_host","web_api_port","web_api_token","adapter_name","adapter_type","adapter_url","adapter_port","access_token","reconnect_interval","heartbeat_interval"});
+            add_prefixed_same("趣味命令", {"签到","今日运势","抽签","塔罗","骰子","D20","硬币","老虎机","今日老婆","菜单","戳一戳"});
+            add_prefixed_same("占卜主题", {"爱情","事业","学习","代码","词库","旅行","睡眠","灵感","奶茶","猫猫","月亮","樱花"});
+            add_prefixed_same("签到奖励", {"樱花币","连续签到","今日奖励","累计奖励","补签卡","幸运贴纸","猫爪徽章","月光券"});
+            add_prefixed_same("趣味道具", {"骰子","硬币","塔罗牌","签筒","魔法棒","奶茶券","猫爪印","星星瓶","好运铃","樱花书签"});
+            add_prefixed_same("可爱动作", {"摸摸头","贴贴","戳一戳","抱抱","转圈","挥手","眨眼","撒花","举爪","打滚"});
             return m;
         }();
         return vars;
@@ -1395,6 +1440,62 @@ private:
 
         return result;
     }
+
+    static int daily_number() {
+        auto now = std::chrono::system_clock::now();
+        auto tnow = std::chrono::system_clock::to_time_t(now);
+        struct tm t;
+#ifdef _WIN32
+        localtime_s(&t, &tnow);
+#else
+        localtime_r(&tnow, &t);
+#endif
+        return (t.tm_year + 1900) * 10000 + (t.tm_mon + 1) * 100 + t.tm_mday;
+    }
+
+    static size_t stable_index(uint64_t seed, size_t size) {
+        if (size == 0) return 0;
+        seed ^= seed >> 33;
+        seed *= 0xff51afd7ed558ccdULL;
+        seed ^= seed >> 33;
+        seed *= 0xc4ceb9fe1a85ec53ULL;
+        seed ^= seed >> 33;
+        return static_cast<size_t>(seed % size);
+    }
+
+    static std::string pick_fun(const std::vector<std::string>& v, uint64_t seed) {
+        return v[stable_index(seed, v.size())];
+    }
+
+    static std::string fortune_level(int score) {
+        if (score >= 95) return "大吉·SSR";
+        if (score >= 80) return "大吉";
+        if (score >= 65) return "中吉";
+        if (score >= 45) return "小吉";
+        if (score >= 25) return "末吉";
+        return "需要奶茶续命";
+    }
+
+    static std::string slot_value(uint64_t seed) {
+        static const std::vector<std::string> icons = {"🌸", "🍒", "⭐", "🐾", "💎", "🍀"};
+        std::string a = icons[stable_index(seed + 1, icons.size())];
+        std::string b = icons[stable_index(seed + 2, icons.size())];
+        std::string c = icons[stable_index(seed + 3, icons.size())];
+        return a + "|" + b + "|" + c;
+    }
+
+    static const std::vector<std::string>& fun_colors() { static const std::vector<std::string> v = {"樱花粉","薄荷绿","奶油白","天空蓝","薰衣草紫","蜜桃橙","月光银","海盐蓝","琥珀金","莓果红"}; return v; }
+    static const std::vector<std::string>& fun_advices() { static const std::vector<std::string> v = {"适合整理词库","适合早点休息","适合大胆表达","适合写代码并提交","适合喝奶茶","适合学习新协议","适合修一个小 bug","适合给自己一点奖励"}; return v; }
+    static const std::vector<std::string>& fun_tarot_cards() { static const std::vector<std::string> v = {"愚者","魔术师","女祭司","女皇","皇帝","教皇","恋人","战车","力量","隐者","命运之轮","正义","倒吊人","死神","节制","恶魔","塔","星星","月亮","太阳","审判","世界"}; return v; }
+    static const std::vector<std::string>& fun_lottery_levels() { static const std::vector<std::string> v = {"大吉","中吉","小吉","吉","末吉","凶转吉","SSR签","猫猫签","樱花签","月光签"}; return v; }
+    static const std::vector<std::string>& fun_moods() { static const std::vector<std::string> v = {"元气","困困","闪闪发光","想摸鱼","很可靠","超可爱","需要抱抱","灵感爆棚"}; return v; }
+    static const std::vector<std::string>& fun_foods() { static const std::vector<std::string> v = {"蛋糕","布丁","拉面","寿司","曲奇","咖喱","三明治","小笼包"}; return v; }
+    static const std::vector<std::string>& fun_drinks() { static const std::vector<std::string> v = {"奶茶","咖啡","可可","果汁","气泡水","抹茶拿铁","蜂蜜柚子茶","乌龙茶"}; return v; }
+    static const std::vector<std::string>& fun_waifus() { static const std::vector<std::string> v = {"樱花魔法师","薄荷猫娘","星空旅人","月白歌姬","代码妖精","奶茶店看板娘","机械天使","图书馆幽灵","海盐偶像","梦境占卜师"}; return v; }
+    static const std::vector<std::string>& fun_titles() { static const std::vector<std::string> v = {"变量炼金术士","樱花观测者","Bug 驯兽师","词库守护者","Milky 调酒师","OneBot 旅人","夜间编译师","幸运猫爪"}; return v; }
+    static const std::vector<std::string>& fun_poke_replies() { static const std::vector<std::string> v = {"戳、戳回来啦！","不要一直戳啦，会害羞的喵~","发送一朵小樱花 🌸","诶嘿，被发现啦！","再戳就把你加入幸运名单哦~"}; return v; }
+    static const std::vector<std::string>& fun_memes() { static const std::vector<std::string> v = {"今日份好耶已送达","bug 只是还没学会变可爱","先保存，再施法","奶茶是生产力的一部分","变量嵌套，快乐加倍","这次一定能编译过"}; return v; }
+    static const std::vector<std::string>& fun_quotes() { static const std::vector<std::string> v = {"月亮慢慢圆，代码慢慢稳。","把复杂拆小，光就会进来。","今天也要温柔地前进。","愿每一次重试都有回声。","小小提交，也是一颗星星。"}; return v; }
 
     // ── 简易表达式计算 ──────────────────────────────────────
     static double simple_eval(const std::string& expr) {

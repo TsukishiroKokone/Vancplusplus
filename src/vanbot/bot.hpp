@@ -10,6 +10,7 @@
 #include "onebot_adapter.hpp"
 #include "cooling.hpp"
 #include "coins.hpp"
+#include "fun_plugins.hpp"
 #include <spdlog/spdlog.h>
 #include <nlohmann/json.hpp>
 #include <regex>
@@ -48,6 +49,7 @@ public:
         , m_variables(m_storage)
         , m_cooling(m_storage)
         , m_coins(m_storage)
+        , m_fun(m_storage, m_coins)
         , m_http(60, 256)
     {
         // 初始化存储
@@ -110,6 +112,7 @@ private:
     VariableEngine m_variables;
     CoolingSystem m_cooling;
     CoinsSystem m_coins;
+    FunPlugins m_fun;
     HttpClient m_http;
     AdapterManager m_adapter_mgr;
     Stats m_stats;
@@ -159,6 +162,20 @@ private:
         add_log("📨 " + message.substr(0, 100));
         m_stats.recv_count++;
         m_stats.last_message = message.substr(0, 200);
+
+        // ZeroBot-plugin 风格趣味功能优先处理（签到 / 运势 / 抽签 / 塔罗 / 骰子 / 戳一戳等）
+        if (auto fun_response = m_fun.handle(bot_id, env, env_id, event, message)) {
+            if (!fun_response->empty()) {
+                auto conn = m_adapter_mgr.get_connection(bot_id);
+                if (conn) {
+                    conn->send_msg(env, env_id, fun_response->substr(0, 3000));
+                    m_stats.send_count++;
+                    m_stats.last_response = fun_response->substr(0, 200);
+                    add_log("🎀 " + fun_response->substr(0, 100));
+                }
+            }
+            return;
+        }
 
         // 构建词库ID数组
         std::vector<std::string> data_ids = {"common"};
