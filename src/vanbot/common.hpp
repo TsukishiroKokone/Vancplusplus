@@ -25,8 +25,10 @@ enum class Env { Group, Private };
 
 // ── 适配器类型 ───────────────────────────────────────────────
 enum class AdapterType {
-    OneBotForwardWS,   // 正向WS: 主动连接 OneBot 实现
-    OneBotReverseWS,   // 反向WS: OneBot 连接到我们
+    OneBotForwardWS,   // OneBot v11 正向WS: 主动连接 OneBot 实现
+    OneBotReverseWS,   // OneBot v11 反向WS: OneBot 连接到我们
+    OneBotV12ForwardWS,// OneBot v12 正向WS
+    OneBotV12ReverseWS,// OneBot v12 反向WS
     Milky,             // Milky 协议
 };
 

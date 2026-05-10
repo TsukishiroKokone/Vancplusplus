@@ -120,7 +120,7 @@ public:
         }
 
         m_storage.write_json(bot_id, "coins.json", *data);
-        return std::to_string(return_change);
+        return return_change;
     }
 
 private:

@@ -14,6 +14,7 @@
 #include <unordered_set>
 #include <functional>
 #include <optional>
+#include <cctype>
 
 namespace vanbot {
 
@@ -82,6 +83,7 @@ public:
             result = replace_random_vars(result);
             result = replace_stats_vars(result, ctx);
             result = replace_identity_vars(result, ctx);
+            result = replace_text_magic_vars(result, ctx);
             result = replace_system_vars(result, ctx);
             result = replace_format_vars(result);
             result = replace_captures(result, ctx.captures);
@@ -204,6 +206,9 @@ public:
         result = replace_all(result, "[随机大写字母]", std::string(1, 'A' + d025(m_rng)));
         result = replace_all(result, "[随机数字]", std::to_string(d09(m_rng)));
         result = replace_all(result, "[随机布尔]", d01(m_rng) ? "true" : "false");
+        result = replace_all(result, "[随机正负]", d01(m_rng) ? "+" : "-");
+        result = replace_all(result, "[随机表情]", std::vector<std::string>{"(ฅ>ω<*ฅ)", "(｡･ω･｡)", "(≧▽≦)", "(*´∀`)~♥", "(つ≧▽≦)つ"}[std::uniform_int_distribution<size_t>(0, 4)(m_rng)]);
+        result = replace_all(result, "[随机颜色]", std::vector<std::string>{"粉色", "薄荷绿", "天蓝", "薰衣草紫", "蜜桃橙", "奶油白"}[std::uniform_int_distribution<size_t>(0, 5)(m_rng)]);
 
         if (result.find("[随机十六进制]") != std::string::npos) {
             int v = d015(m_rng);
@@ -260,6 +265,24 @@ public:
         return result;
     }
 
+    // ── 文本魔法变量 ─────────────────────────────────────────
+    static std::string replace_text_magic_vars(const std::string& text, const VarContext& ctx) {
+        std::string result = text;
+        result = replace_all(result, "[艾特]", "[CQ:at,qq=" + std::to_string(ctx.event_user_id) + "]");
+        result = replace_all(result, "[at]", "[CQ:at,qq=" + std::to_string(ctx.event_user_id) + "]");
+        result = replace_all(result, "[回复]", "[CQ:reply,id=" + std::to_string(ctx.event_message_id) + "]");
+        result = replace_all(result, "[reply]", "[CQ:reply,id=" + std::to_string(ctx.event_message_id) + "]");
+        result = replace_all(result, "[目标]", std::to_string(ctx.event_target_id));
+        result = replace_all(result, "[target]", std::to_string(ctx.event_target_id));
+        result = replace_all(result, "[昵称或QQ]", ctx.event_sender_name.empty() ? std::to_string(ctx.event_user_id) : ctx.event_sender_name);
+        result = replace_all(result, "[群名片或昵称]", ctx.event_sender_card.empty() ? ctx.event_sender_name : ctx.event_sender_card);
+        result = replace_all(result, "[是否群聊]", ctx.env == Env::Group ? "true" : "false");
+        result = replace_all(result, "[是否私聊]", ctx.env == Env::Private ? "true" : "false");
+        result = replace_all(result, "[bot]", std::to_string(ctx.bot_id));
+        result = replace_all(result, "[机器人]", std::to_string(ctx.bot_id));
+        return result;
+    }
+
     // ── 系统变量 ─────────────────────────────────────────────
     static std::string replace_system_vars(const std::string& text, const VarContext& ctx) {
         std::string result = text;
@@ -268,7 +291,11 @@ public:
     #else
         result = replace_all(result, "[平台]", "Linux");
     #endif
+        (void)ctx;
         result = replace_all(result, "[版本]", "3.0.0");
+        result = replace_all(result, "[项目名]", "Van Lexicon");
+        result = replace_all(result, "[作者]", "TsukishiroKokone (https://github.com/TsukishiroKokone)");
+        result = replace_all(result, "[协议]", "OneBot v11/v12, Milky");
         result = replace_all(result, "[空]", "");
         result = replace_all(result, "[换行]", "\n");
         result = replace_all(result, "[制表符]", "\t");
@@ -328,7 +355,7 @@ public:
             while (std::regex_search(it, result.cend(), m, upper_re)) {
                 o.append(it, m[0].first);
                 std::string s = m[1].str();
-                std::transform(s.begin(), s.end(), std::back_inserter(o), ::toupper);
+                std::transform(s.begin(), s.end(), std::back_inserter(o), [](unsigned char ch) { return static_cast<char>(std::toupper(ch)); });
                 it = m[0].second;
             }
             if (it != result.cend()) o.append(it, result.cend());
@@ -340,7 +367,7 @@ public:
             while (std::regex_search(it, result.cend(), m, lower_re)) {
                 o.append(it, m[0].first);
                 std::string s = m[1].str();
-                std::transform(s.begin(), s.end(), std::back_inserter(o), ::tolower);
+                std::transform(s.begin(), s.end(), std::back_inserter(o), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
                 it = m[0].second;
             }
             if (it != result.cend()) o.append(it, result.cend());
@@ -376,6 +403,47 @@ public:
                     else
                         o += std::to_string(val);
                 } catch (...) { o += m[1].str(); }
+                it = m[0].second;
+            }
+            if (it != result.cend()) o.append(it, result.cend());
+            if (!o.empty() && o != result) result = o;
+        }
+
+        // [反转.文本]
+        static const std::regex rev_re(R"(\[反转\.([^\]]+)\])");
+        {
+            std::smatch m; std::string::const_iterator it = result.cbegin(); std::string o;
+            while (std::regex_search(it, result.cend(), m, rev_re)) {
+                o.append(it, m[0].first);
+                std::string s = m[1].str();
+                std::reverse(s.begin(), s.end());
+                o += s;
+                it = m[0].second;
+            }
+            if (it != result.cend()) o.append(it, result.cend());
+            if (!o.empty() && o != result) result = o;
+        }
+
+        // [包围.左.右.文本]
+        static const std::regex wrap_re(R"(\[包围\.([^\]]+)\.([^\]]+)\.([^\]]+)\])");
+        {
+            std::smatch m; std::string::const_iterator it = result.cbegin(); std::string o;
+            while (std::regex_search(it, result.cend(), m, wrap_re)) {
+                o.append(it, m[0].first);
+                o += m[1].str() + m[3].str() + m[2].str();
+                it = m[0].second;
+            }
+            if (it != result.cend()) o.append(it, result.cend());
+            if (!o.empty() && o != result) result = o;
+        }
+
+        // [默认.值.默认值]
+        static const std::regex def_re(R"(\[默认\.([^\]]*)\.([^\]]+)\])");
+        {
+            std::smatch m; std::string::const_iterator it = result.cbegin(); std::string o;
+            while (std::regex_search(it, result.cend(), m, def_re)) {
+                o.append(it, m[0].first);
+                o += m[1].str().empty() ? m[2].str() : m[1].str();
                 it = m[0].second;
             }
             if (it != result.cend()) o.append(it, result.cend());
@@ -471,7 +539,7 @@ private:
         std::vector<char> ops;
         std::string num;
         for (char c : expr) {
-            if (std::isdigit(c) || c == '.') { num += c; }
+            if (std::isdigit(static_cast<unsigned char>(c)) || c == '.') { num += c; }
             else if (c == '+' || c == '-' || c == '*' || c == '/') {
                 if (!num.empty()) { nums.push_back(std::stod(num)); num.clear(); }
                 ops.push_back(c);

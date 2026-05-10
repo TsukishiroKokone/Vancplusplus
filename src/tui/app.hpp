@@ -12,8 +12,12 @@
 #include <atomic>
 #include <chrono>
 #include <ctime>
+#include <algorithm>
 
 namespace vanbot {
+
+class Bot;
+int run_tui(Bot& bot);
 
 // ── 可爱配色方案 ─────────────────────────────────────────────
 namespace kawaii {
@@ -35,12 +39,12 @@ namespace kawaii {
     // ── 可爱装饰元素 ─────────────────────────────────────────
     inline Element kawaii_header() {
         return hbox({
-            text("🌸") | bold,
-            text(" VanBot v3.0.0 ") | bold | color(HotPink) | bgcolor(Color::RGB(255,248,255)),
-            text(" 🌸") | bold,
+            text(" ✦ ") | color(Pink) | bold,
+            text("Van Lexicon") | color(SoftWhite) | bold,
+            text("  kawaii code console") | color(Lavender),
             filler(),
-            text("✨ 可爱系词库机器人 ✨") | color(Lavender),
-        });
+            text("♡ onebot v11/v12 · milky ♡ ") | color(Peach),
+        }) | bgcolor(Color::RGB(24, 24, 37));
     }
 
     inline Element kawaii_separator() {
@@ -75,7 +79,7 @@ namespace kawaii {
     inline Element stats_panel(uint64_t recv, uint64_t send,
                                uint64_t lexicon, int64_t lexicon_id) {
         return window(
-            text("📊 统计") | color(HotPink) | bold,
+            text(" 󰙨 runtime ") | color(HotPink) | bold,
             vbox({
                 hbox({ text("  📩 收消息: ") | color(DimGray),
                        text(std::to_string(recv)) | color(Mint) | bold }),
@@ -105,7 +109,7 @@ namespace kawaii {
             }
         }
         return window(
-            text("🔗 适配器") | color(SkyBlue) | bold,
+            text(" 󰒋 adapters ") | color(SkyBlue) | bold,
             vbox(items)
         ) | bgcolor(MintBg);
     }
@@ -113,8 +117,8 @@ namespace kawaii {
     // ── 日志面板 ────────────────────────────────────────────
     inline Element log_panel(const std::vector<std::string>& logs, int scroll_y) {
         Elements log_lines;
-        int start = std::max(0, static_cast<int>(logs.size()) - 20 + scroll_y);
-        int end = std::min(static_cast<int>(logs.size()), start + 20);
+        int start = (std::max)(0, static_cast<int>(logs.size()) - 20 + scroll_y);
+        int end = (std::min)(static_cast<int>(logs.size()), start + 20);
 
         for (int i = start; i < end; i++) {
             const auto& line = logs[i];
@@ -135,7 +139,7 @@ namespace kawaii {
         }
 
         return window(
-            text("💬 消息日志") | color(Mint) | bold,
+            text(" ✧ event stream ") | color(Mint) | bold,
             vbox(log_lines) | flex
         ) | bgcolor(Color::RGB(250, 250, 255));
     }
@@ -143,7 +147,7 @@ namespace kawaii {
     // ── 最近消息面板 ────────────────────────────────────────
     inline Element recent_panel(const std::string& last_msg, const std::string& last_resp) {
         return window(
-            text("📝 最近交互") | color(Peach) | bold,
+            text(" 󰦨 last exchange ") | color(Peach) | bold,
             vbox({
                 hbox({ text("  收: ") | color(DimGray) | bold,
                        text(last_msg.substr(0, 60)) | color(SkyBlue) }),
@@ -156,7 +160,7 @@ namespace kawaii {
     // ── 帮助面板 ────────────────────────────────────────────
     inline Element help_panel() {
         return window(
-            text("🎀 帮助") | color(Lavender) | bold,
+            text(" ? commands ") | color(Lavender) | bold,
             vbox({
                 text("  [q] 退出  [c] 清除日志") | color(DimGray),
                 text("  [↑↓] 滚动日志  [r] 重连") | color(DimGray),

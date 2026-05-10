@@ -1,7 +1,7 @@
 // ─── VanBot v3.0.0 - Main Entry ─────────────────────────────
 // 高性能 C++ QQ 关键词词库机器人
-// 多适配器架构：OneBot v11 正向/反向WS + Milky协议
-// 作者: ZiYi / 星星  |  项目地址: https://github.com/Van-Zone/VanBot/
+// 多适配器架构：OneBot v11/v12 正向/反向WS + Milky协议
+// 本版本作者: TsukishiroKokone | https://github.com/TsukishiroKokone
 // MIT License
 
 #include "vanbot/bot.hpp"
@@ -25,13 +25,13 @@ static void show_banner() {
     std::cout << R"(
   ╔═══════════════════════════════════════════════════╗
   ║                                                   ║
-  ║     🌸  VanBot v3.0.0  🌸                        ║
+  ║     🌸  Van Lexicon v3.0.0  🌸                   ║
   ║     高性能 C++ QQ 关键词词库机器人               ║
   ║     多适配器 · 嵌套变量 · 可爱系TUI              ║
   ║                                                   ║
-  ║     作者: ZiYi / 星星                             ║
-  ║     交流群: 1019070322                            ║
-  ║     项目: https://github.com/Van-Zone/VanBot/    ║
+  ║     本版本作者: TsukishiroKokone                 ║
+  ║     GitHub: https://github.com/TsukishiroKokone  ║
+  ║     原词库: https://github.com/Van-Zone/VanBot/  ║
   ║                                                   ║
   ╚═══════════════════════════════════════════════════╝
 )" << std::endl;
@@ -39,8 +39,10 @@ static void show_banner() {
 
 // ── 解析适配器类型字符串 ──────────────────────────────────────
 static vanbot::AdapterType parse_adapter_type(const std::string& s) {
-    if (s == "forward" || s == "fwd" || s == "1") return vanbot::AdapterType::OneBotForwardWS;
-    if (s == "reverse" || s == "rev" || s == "2") return vanbot::AdapterType::OneBotReverseWS;
+    if (s == "forward" || s == "fwd" || s == "ob11-forward" || s == "onebot11-forward" || s == "1") return vanbot::AdapterType::OneBotForwardWS;
+    if (s == "reverse" || s == "rev" || s == "ob11-reverse" || s == "onebot11-reverse" || s == "2") return vanbot::AdapterType::OneBotReverseWS;
+    if (s == "v12-forward" || s == "ob12-forward" || s == "onebot12-forward" || s == "4") return vanbot::AdapterType::OneBotV12ForwardWS;
+    if (s == "v12-reverse" || s == "ob12-reverse" || s == "onebot12-reverse" || s == "5") return vanbot::AdapterType::OneBotV12ReverseWS;
     if (s == "milky" || s == "3") return vanbot::AdapterType::Milky;
     return vanbot::AdapterType::OneBotForwardWS;
 }
@@ -70,13 +72,28 @@ static vanbot::Config parse_args(int argc, char* argv[]) {
             if (i + 1 < argc && argv[i + 1][0] != '-') {
                 adapter.url = argv[++i];
             }
-            if (adapter.type == vanbot::AdapterType::OneBotReverseWS && i + 1 < argc && argv[i + 1][0] != '-') {
+            if ((adapter.type == vanbot::AdapterType::OneBotReverseWS || adapter.type == vanbot::AdapterType::OneBotV12ReverseWS) && i + 1 < argc && argv[i + 1][0] != '-') {
                 adapter.port = std::stoi(argv[++i]);
             }
             if (i + 1 < argc && argv[i + 1][0] != '-') {
                 adapter.access_token = argv[++i];
             }
 
+            config.adapters.push_back(adapter);
+        } else if (arg == "--v12-ws" && i + 1 < argc) {
+            vanbot::AdapterConfig adapter;
+            adapter.name = "onebot-v12";
+            adapter.type = vanbot::AdapterType::OneBotV12ForwardWS;
+            adapter.url = argv[++i];
+            if (i + 1 < argc && argv[i + 1][0] != '-') {
+                adapter.access_token = argv[++i];
+            }
+            config.adapters.push_back(adapter);
+        } else if (arg == "--v12-reverse-ws" && i + 1 < argc) {
+            vanbot::AdapterConfig adapter;
+            adapter.name = "onebot-v12-reverse";
+            adapter.type = vanbot::AdapterType::OneBotV12ReverseWS;
+            adapter.port = std::stoi(argv[++i]);
             config.adapters.push_back(adapter);
         } else if (arg == "--reverse-ws" && i + 1 < argc) {
             // 快捷：添加反向WS适配器
@@ -102,7 +119,7 @@ static vanbot::Config parse_args(int argc, char* argv[]) {
         } else if (arg == "--help" || arg == "-h") {
             std::cout << R"(
 VanBot v3.0.0 - 高性能 C++ QQ 关键词词库机器人
-多适配器架构：OneBot v11 正向/反向WS + Milky协议
+多适配器架构：OneBot v11/v12 正向/反向WS + Milky协议
 
 用法: vanbot [选项]
 
@@ -110,17 +127,21 @@ VanBot v3.0.0 - 高性能 C++ QQ 关键词词库机器人
   -w, --ws <url>              OneBot 正向WS地址 (兼容旧参数)
   -d, --data <dir>            数据存储目录 (默认: ./Van_keyword)
   --add-adapter <name> <type> [url] [port] [token]
-                              添加适配器 (type: forward/rev/milky)
-  --reverse-ws <port>         快捷添加反向WS适配器
+                              添加适配器 (type: forward/rev/v12-forward/v12-reverse/milky)
+  --reverse-ws <port>         快捷添加 OneBot v11 反向WS适配器
+  --v12-ws <url> [token]      快捷添加 OneBot v12 正向WS适配器
+  --v12-reverse-ws <port>     快捷添加 OneBot v12 反向WS适配器
   --milky <url> [token]       快捷添加Milky适配器
   --self-trigger               启用自触发 (默认)
   --no-self-trigger            禁用自触发
   -h, --help                   显示帮助信息
 
 适配器类型:
-  forward / fwd / 1   OneBot v11 正向WS (主动连接)
-  reverse / rev / 2   OneBot v11 反向WS (被动监听)
-  milky / 3           Milky 协议
+  forward / fwd / 1           OneBot v11 正向WS (主动连接)
+  reverse / rev / 2           OneBot v11 反向WS (被动监听)
+  milky / 3                   Milky 协议
+  v12-forward / ob12-forward  OneBot v12 正向WS
+  v12-reverse / ob12-reverse  OneBot v12 反向WS
 
 示例:
   vanbot --ws ws://localhost:6700
@@ -128,6 +149,8 @@ VanBot v3.0.0 - 高性能 C++ QQ 关键词词库机器人
   vanbot --add-adapter bot2 reverse 6701 mytoken
   vanbot --add-adapter bot3 milky ws://localhost:8765 milkypass
   vanbot --reverse-ws 6701 --milky ws://localhost:8765
+  vanbot --v12-ws ws://localhost:6702
+  vanbot --v12-reverse-ws 6703
   vanbot -w ws://localhost:6700 --reverse-ws 9800 --data ./my_data
 )" << std::endl;
             exit(0);
@@ -171,9 +194,11 @@ int main(int argc, char* argv[]) {
         switch (adapter.type) {
             case vanbot::AdapterType::OneBotForwardWS: type_str = "OneBot-正向WS"; break;
             case vanbot::AdapterType::OneBotReverseWS: type_str = "OneBot-反向WS"; break;
+            case vanbot::AdapterType::OneBotV12ForwardWS: type_str = "OneBot-v12-正向WS"; break;
+            case vanbot::AdapterType::OneBotV12ReverseWS: type_str = "OneBot-v12-反向WS"; break;
             case vanbot::AdapterType::Milky: type_str = "Milky"; break;
         }
-        if (adapter.type == vanbot::AdapterType::OneBotReverseWS) {
+        if (adapter.type == vanbot::AdapterType::OneBotReverseWS || adapter.type == vanbot::AdapterType::OneBotV12ReverseWS) {
             spdlog::info("    [{}] {} port={}", adapter.name, type_str, adapter.port);
         } else {
             spdlog::info("    [{}] {} url={}", adapter.name, type_str, adapter.url);

@@ -72,7 +72,7 @@ int run_tui(Bot& bot) {
 
             // ─── 底部状态栏 ───────────────────────────────
             hbox({
-                text(" 🌸 VanBot ") | bold | color(HotPink),
+                text(" ✦ Van Lexicon ") | bold | color(HotPink),
                 separator(),
                 status_indicator(any_connected),
                 separator(),
@@ -80,7 +80,7 @@ int run_tui(Bot& bot) {
                 separator(),
                 time_display(),
                 filler(),
-                text(" Made with 💖 ") | color(Pink),
+                text(" claude-code style · made with ♡ ") | color(Pink),
             }),
         });
 
@@ -88,26 +88,26 @@ int run_tui(Bot& bot) {
     });
 
     // 捕获键盘事件
-    auto component = CatchEvent(renderer, [&](Event event) {
-        if (event == Event::Character('q')) {
+    auto component = CatchEvent(renderer, [&](ftxui::Event event) {
+        if (event == ftxui::Event::Character('q')) {
             screen.Exit();
             return true;
         }
-        if (event == Event::ArrowUp) {
+        if (event == ftxui::Event::ArrowUp) {
             scroll_y++;
             return true;
         }
-        if (event == Event::ArrowDown) {
-            scroll_y = std::max(0, scroll_y - 1);
+        if (event == ftxui::Event::ArrowDown) {
+            scroll_y = (std::max)(0, scroll_y - 1);
             return true;
         }
-        if (event == Event::Character('c')) {
+        if (event == ftxui::Event::Character('c')) {
             bot.add_log("🗑️ 日志已清除");
             std::lock_guard lock(bot.stats().log_mutex);
             bot.stats().recent_logs.clear();
             return true;
         }
-        if (event == Event::Character('r')) {
+        if (event == ftxui::Event::Character('r')) {
             bot.add_log("🔄 正在重连所有适配器...");
             bot.adapter_mgr().start_all();
             return true;
@@ -121,7 +121,7 @@ int run_tui(Bot& bot) {
         while (refresh_running) {
             using namespace std::chrono_literals;
             std::this_thread::sleep_for(500ms);
-            screen.PostEvent(Event::Custom);
+            screen.PostEvent(ftxui::Event::Custom);
         }
     });
 

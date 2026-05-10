@@ -20,6 +20,9 @@ out/
 
 # vcpkg
 vcpkg_installed/
+/vcpkg/
+/build-vs/
+/build-syntax/
 
 # Data
 Van_keyword/

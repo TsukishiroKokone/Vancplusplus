@@ -1,7 +1,9 @@
 # Van Lexicon [This Version is Unofficial !!!]
 ### We're Very Thank for Van-Zone Organization All Developer!
 > 本项目使用 VanBot 词库，来源：[https://github.com/ZiYiQuQ/VanBot](https://github.com/ZiYiQuQ/VanBot)
-> 
+>
+> 本版本作者：TsukishiroKokone ([https://github.com/TsukishiroKokone](https://github.com/TsukishiroKokone))
+>
 > Tips " This Project Develop by AI {Vibe code} "
 
 **We will not and are prohibited from writing features related to QQ Wallet and red envelope grabbing!!!**
@@ -18,21 +20,22 @@
 ### Protocol End Compatibility
 - [x] OneBot v11 (Forward WebSocket)
 - [x] OneBot v11 (Reverse WebSocket)
+- [x] OneBot v12 (Forward WebSocket)
+- [x] OneBot v12 (Reverse WebSocket)
 - [x] Milky
-- [ ] OneBot v12 (Planned)
 
 ### Function List
 - [x] Van Lexicon Basic Function -> https://github.com/Van-Zone/VanBot
 - [x] Multi-Adapter Architecture (Multiple bots simultaneously)
 - [x] Nested Variable System (Up to 8 levels of recursion)
-- [x] 50+ Built-in Variables
+- [x] 60+ Built-in Variables
 - [x] Cooldown System
 - [x] Virtual Coins System
 - [x] HTTP GET Variable with LRU Cache
 - [x] Delayed Segment Sending
 - [x] Condition Judgment Variables
 - [x] Regex Capture Groups `[n.?]`
-- [x] Kawaii TUI (Sakura Pink + Mint Green)
+- [x] Claude Code CLI-style Kawaii TUI (Sakura Pink + Mint Green)
 - [x] Cross-Platform (Linux / Windows)
 - [x] GitHub Actions CI/CD (GCC + Clang + MSVC)
 - [ ] SQLite Database Support (Planned)
@@ -103,12 +106,15 @@ cmake --build build --config Release
 ./vanbot \
   --add-adapter bot1 forward ws://localhost:6700 \
   --add-adapter bot2 reverse 9800 mytoken \
-  --add-adapter bot3 milky ws://localhost:8765 milkypass
+  --add-adapter bot3 v12-forward ws://localhost:6702 \
+  --add-adapter bot4 milky ws://localhost:8765 milkypass
 
 # Shortcuts
 ./vanbot \
   -w ws://localhost:6700 \
   --reverse-ws 9800 \
+  --v12-ws ws://localhost:6702 \
+  --v12-reverse-ws 9801 \
   --milky ws://localhost:8765 milkypass
 ```
 
@@ -120,6 +126,8 @@ cmake --build build --config Release
 | `-d, --data <dir>` | Data directory (default: ./Van_keyword) |
 | `--add-adapter <name> <type> [url] [port] [token]` | Add adapter |
 | `--reverse-ws <port>` | Quick add Reverse WS adapter |
+| `--v12-ws <url> [token]` | Quick add OneBot v12 Forward WS adapter |
+| `--v12-reverse-ws <port>` | Quick add OneBot v12 Reverse WS adapter |
 | `--milky <url> [token]` | Quick add Milky adapter |
 | `--self-trigger` | Enable self-trigger (default) |
 | `--no-self-trigger` | Disable self-trigger |
@@ -129,9 +137,11 @@ cmake --build build --config Release
 
 | Type | Keyword | Description |
 |---|---|---|
-| OneBot v11 Forward WS | `forward` / `fwd` / `1` | Actively connect to OneBot |
-| OneBot v11 Reverse WS | `reverse` / `rev` / `2` | OneBot connects to us |
+| OneBot v11 Forward WS | `forward` / `fwd` / `1` | Actively connect to OneBot v11 |
+| OneBot v11 Reverse WS | `reverse` / `rev` / `2` | OneBot v11 connects to us |
 | Milky | `milky` / `3` | Milky Protocol |
+| OneBot v12 Forward WS | `v12-forward` / `ob12-forward` / `4` | Actively connect to OneBot v12 |
+| OneBot v12 Reverse WS | `v12-reverse` / `ob12-reverse` / `5` | OneBot v12 connects to us |
 
 ---
 

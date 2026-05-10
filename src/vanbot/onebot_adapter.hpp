@@ -1,6 +1,6 @@
 #pragma once
 // ─── VanBot Multi-Protocol Adapter ──────────────────────────
-// 支持: OneBot v11 正向WS / 反向WS / Milky 协议
+// 支持: OneBot v11/v12 正向WS / 反向WS / Milky 协议
 // 多实例并行，每个 Bot 连接独立管理
 #include "common.hpp"
 #include <nlohmann/json.hpp>
@@ -42,9 +42,11 @@ public:
         m_running = true;
         switch (m_config.type) {
             case AdapterType::OneBotForwardWS:
+            case AdapterType::OneBotV12ForwardWS:
                 start_forward_ws();
                 break;
             case AdapterType::OneBotReverseWS:
+            case AdapterType::OneBotV12ReverseWS:
                 // 反向WS由 AdapterManager 统一管理
                 break;
             case AdapterType::Milky:
@@ -79,24 +81,31 @@ public:
 
     // ── 发送群消息 ──────────────────────────────────────────
     void send_group_msg(GroupId group_id, const std::string& message) {
-        json payload = {
-            {"action", "send_group_msg"},
-            {"params", {{"group_id", group_id}, {"message", message}}}
-        };
-        send_payload(payload);
+        call_api(is_onebot_v12() ? "send_message" : "send_group_msg",
+                 is_onebot_v12()
+                     ? json{{"detail_type", "group"}, {"group_id", group_id}, {"message", message}}
+                     : json{{"group_id", group_id}, {"message", message}});
     }
 
     // ── 发送私聊消息 ────────────────────────────────────────
     void send_private_msg(UserId user_id, const std::string& message) {
-        json payload = {
-            {"action", "send_private_msg"},
-            {"params", {{"user_id", user_id}, {"message", message}}}
-        };
-        send_payload(payload);
+        call_api(is_onebot_v12() ? "send_message" : "send_private_msg",
+                 is_onebot_v12()
+                     ? json{{"detail_type", "private"}, {"user_id", user_id}, {"message", message}}
+                     : json{{"user_id", user_id}, {"message", message}});
     }
 
     // ── 通用 API 调用 ────────────────────────────────────────
     void call_api(const std::string& action, const json& params = json::object()) {
+        if (is_onebot_v12()) {
+            json payload = {
+                {"action", action},
+                {"params", params},
+                {"echo", next_echo()}
+            };
+            send_payload(payload);
+            return;
+        }
         json payload = {{"action", action}, {"params", params}};
         send_payload(payload);
     }
@@ -172,6 +181,16 @@ public:
         call_api("get_group_list");
     }
 
+    bool is_onebot_v12() const {
+        return m_config.type == AdapterType::OneBotV12ForwardWS ||
+               m_config.type == AdapterType::OneBotV12ReverseWS;
+    }
+
+    bool is_reverse_ws() const {
+        return m_config.type == AdapterType::OneBotReverseWS ||
+               m_config.type == AdapterType::OneBotV12ReverseWS;
+    }
+
     bool is_connected() const { return m_connected; }
     const AdapterConfig& config() const { return m_config; }
     const std::string& name() const { return m_config.name; }
@@ -216,7 +235,7 @@ private:
                 });
 
                 spdlog::info("🔗 [{}] 正在连接: {}", m_config.name, m_config.url);
-                m_ws->open();
+                m_ws->start();
 
                 // 等待重连
                 while (m_running && m_ws->getReadyState() != ix::ReadyState::Closed) {
@@ -263,7 +282,7 @@ private:
                 });
 
                 spdlog::info("🔗 [{}] 正在连接 Milky: {}", m_config.name, m_config.url);
-                m_ws->open();
+                m_ws->start();
 
                 while (m_running && m_ws->getReadyState() != ix::ReadyState::Closed) {
                     std::this_thread::sleep_for(std::chrono::milliseconds(500));
@@ -302,10 +321,9 @@ private:
     void handle_message(const std::string& raw) {
         try {
             auto j = json::parse(raw);
-            if (j.contains("status")) return;  // API 响应，忽略
-            if (!j.contains("post_type")) return;
+            if (j.contains("status") || j.contains("retcode")) return;  // API 响应，忽略
 
-            Event event = parse_onebot_event(j);
+            Event event = is_onebot_v12() ? parse_onebot_v12_event(j) : parse_onebot_event(j);
             m_self_id = event.self_id;
 
             if (m_callback) m_callback(event, event.self_id);
@@ -543,6 +561,93 @@ private:
 
         return event;
     }
+
+    // ── OneBot v12 事件解析 ─────────────────────────────────
+    static Event parse_onebot_v12_event(const json& j) {
+        Event event;
+        event.self_id = j.contains("self") ? json_to_i64(j["self"]) : 0;
+        if (event.self_id == 0 && j.contains("self") && j["self"].is_object()) {
+            event.self_id = j["self"].contains("user_id") ? json_to_i64(j["self"]["user_id"]) : 0;
+        }
+        if (event.self_id == 0 && j.contains("self_id")) event.self_id = json_to_i64(j["self_id"]);
+        event.user_id = j.contains("user_id") ? json_to_i64(j["user_id"]) : 0;
+        event.group_id = j.contains("group_id") ? json_to_i64(j["group_id"]) : 0;
+        event.message_id = j.contains("message_id") ? json_to_i64(j["message_id"]) : 0;
+
+        std::string type = j.value("type", j.value("post_type", ""));
+        std::string detail_type = j.value("detail_type", j.value("message_type", ""));
+        std::string sub_type = j.value("sub_type", "");
+        event.target_id = j.contains("target_id") ? json_to_i64(j["target_id"]) : 0;
+        event.operator_id = j.contains("operator_id") ? json_to_i64(j["operator_id"]) : 0;
+        event.duration = j.contains("duration") ? json_to_i64(j["duration"]) : 0;
+
+        if (j.contains("sender")) {
+            auto& sender = j["sender"];
+            event.sender_name = sender.value("nickname", sender.value("name", ""));
+            event.sender_card = sender.value("card", event.sender_name);
+        }
+
+        if (type == "message" || j.contains("message")) {
+            event.type = (detail_type == "group") ? Event::GroupMessage : Event::PrivateMessage;
+            event.raw_message = parse_ob12_message(j.value("message", json::array()));
+            if (event.raw_message.empty()) event.raw_message = j.value("raw_message", j.value("alt_message", ""));
+        } else if (type == "notice") {
+            event.type = Event::Lifecycle;
+            if (detail_type == "group_member_increase") event.type = Event::GroupIncrease;
+            else if (detail_type == "group_member_decrease") event.type = Event::GroupDecrease;
+            else if (detail_type == "group_message_delete") event.type = Event::GroupRecall;
+            else if (detail_type == "friend_increase") event.type = Event::FriendAdd;
+            else if (detail_type == "group_admin_set") event.type = Event::GroupAdminSet;
+            else if (detail_type == "group_admin_unset") event.type = Event::GroupAdminUnset;
+            else if (detail_type == "group_ban") event.type = Event::GroupBan;
+            else if (detail_type == "group_unban") event.type = Event::GroupUnBan;
+            else if (detail_type == "poke" || sub_type == "poke") event.type = Event::Poke;
+        } else if (type == "meta") {
+            event.type = Event::Heartbeat;
+            event.online = true;
+        }
+        return event;
+    }
+
+    static std::string parse_ob12_message(const json& message) {
+        if (message.is_string()) return message.get<std::string>();
+        if (!message.is_array()) return "";
+        std::string text;
+        for (const auto& seg : message) {
+            std::string type = seg.value("type", "");
+            json data = seg.value("data", json::object());
+            if (type == "text") text += data.value("text", "");
+            else if (type == "mention" || type == "at") text += "[CQ:at,qq=" + json_to_string(data.contains("user_id") ? data["user_id"] : data.value("qq", json{})) + "]";
+            else if (type == "image") text += "[CQ:image,url=" + json_to_string(data.contains("url") ? data["url"] : data.value("file", json{})) + "]";
+            else if (type == "reply") text += "[CQ:reply,id=" + json_to_string(data.contains("message_id") ? data["message_id"] : data.value("id", json{})) + "]";
+            else if (type == "face") text += "[CQ:face,id=" + json_to_string(data.contains("id") ? data["id"] : json{}) + "]";
+            else if (type == "voice" || type == "record") text += "[CQ:record,url=" + json_to_string(data.contains("url") ? data["url"] : data.value("file", json{})) + "]";
+            else if (type == "video") text += "[CQ:video,url=" + json_to_string(data.contains("url") ? data["url"] : data.value("file", json{})) + "]";
+        }
+        return text;
+    }
+
+    static int64_t json_to_i64(const json& v) {
+        try {
+            if (v.is_number_integer()) return v.get<int64_t>();
+            if (v.is_string()) return std::stoll(v.get<std::string>());
+        } catch (...) {}
+        return 0;
+    }
+
+    static std::string json_to_string(const json& v) {
+        if (v.is_string()) return v.get<std::string>();
+        if (v.is_number_integer()) return std::to_string(v.get<int64_t>());
+        if (v.is_number_unsigned()) return std::to_string(v.get<uint64_t>());
+        if (v.is_number_float()) return std::to_string(v.get<double>());
+        if (v.is_boolean()) return v.get<bool>() ? "true" : "false";
+        return "";
+    }
+
+    static std::string next_echo() {
+        static std::atomic<uint64_t> seq{1};
+        return "vanbot-" + std::to_string(seq.fetch_add(1));
+    }
 };
 
 // ── 适配器管理器（管理多个连接） ─────────────────────────────
@@ -567,7 +672,7 @@ public:
     void start_all() {
         std::shared_lock lock(m_mutex);
         for (auto& [name, conn] : m_connections) {
-            if (conn->config().type != AdapterType::OneBotReverseWS) {
+            if (!conn->is_reverse_ws()) {
                 conn->start();
             }
         }
@@ -638,7 +743,7 @@ private:
         {
             std::shared_lock lock(m_mutex);
             for (auto& [name, conn] : m_connections) {
-                if (conn->config().type == AdapterType::OneBotReverseWS) {
+                if (conn->is_reverse_ws()) {
                     port_to_names[conn->config().port].push_back(name);
                 }
             }
@@ -682,8 +787,10 @@ private:
 
     static std::string adapter_type_name(AdapterType type) {
         switch (type) {
-            case AdapterType::OneBotForwardWS: return "OneBot-正向WS";
-            case AdapterType::OneBotReverseWS: return "OneBot-反向WS";
+            case AdapterType::OneBotForwardWS: return "OneBot-v11-正向WS";
+            case AdapterType::OneBotReverseWS: return "OneBot-v11-反向WS";
+            case AdapterType::OneBotV12ForwardWS: return "OneBot-v12-正向WS";
+            case AdapterType::OneBotV12ReverseWS: return "OneBot-v12-反向WS";
             case AdapterType::Milky: return "Milky";
             default: return "Unknown";
         }

@@ -34,9 +34,10 @@ target_link_libraries(vanbot PRIVATE
     ixwebsocket::ixwebsocket
 )
 
-# Windows 特定链接
+# Windows 特定配置
 if(WIN32)
-    target_link_libraries(vanbot PRIVATE ws2_32 crypt32)
+    target_compile_definitions(vanbot PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_link_libraries(vanbot PRIVATE ws2_32 crypt32 bcrypt)
 endif()
 
 # Linux 特定链接
@@ -57,7 +58,6 @@ else()
 endif()
 
 # ── 静态链接（Release） ──────────────────────────────────
-if(WIN32 AND CMAKE_BUILD_TYPE STREQUAL "Release")
-    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
-    target_compile_options(vanbot PRIVATE /MT)
+if(MSVC AND CMAKE_BUILD_TYPE STREQUAL "Release")
+    set_property(TARGET vanbot PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded")
 endif()

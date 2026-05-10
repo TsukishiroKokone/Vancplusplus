@@ -25,8 +25,6 @@ std::string HttpClient::do_get(const std::string& url) const {
         cli.set_connection_timeout(m_timeout);
         cli.set_read_timeout(m_timeout);
         cli.set_follow_location(true);
-        cli.enable_server_certificate_verification(false);
-
         auto res = cli.Get(path);
         if (res && res->status == 200) {
             // trim
