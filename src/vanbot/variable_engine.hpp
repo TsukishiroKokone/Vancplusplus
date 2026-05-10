@@ -163,7 +163,7 @@ public:
     #ifdef _WIN32
         localtime_s(&tm_now, &time_t_now);
     #else
-        localtime_r(&tm_now, &time_t_now);
+        localtime_r(&time_t_now, &tm_now);
     #endif
         std::string result = replace_time_exact_species(text, tm_now, time_t_now);
         result = replace_all(result, "(Y)", std::to_string(tm_now.tm_year + 1900));
