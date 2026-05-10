@@ -357,7 +357,9 @@ src/
 
 ## 📄 License
 
-MIT License — See [LICENSE](LICENSE)
+AGPL-3.0-or-later — See [LICENSE](LICENSE)
+
+This project is licensed under the GNU Affero General Public License v3.0 or later. If you modify this project and provide it as a network service, you must make the corresponding source code available to users under the same license.
 
 ---
 
