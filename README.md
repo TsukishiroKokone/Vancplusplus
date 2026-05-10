@@ -29,6 +29,7 @@
 - [x] Multi-Adapter Architecture (Multiple bots simultaneously)
 - [x] Nested Variable System (Up to 52 levels of recursion)
 - [x] 520+ Distinct Useful Variable Families ([VARIABLES.md](VARIABLES.md))
+- [x] Five 100+ Variable Categories (Parameterized Tools / User Events / Environment / Time / Random)
 - [x] Cooldown System
 - [x] Virtual Coins System
 - [x] HTTP GET Variable with LRU Cache
@@ -221,9 +222,17 @@ Variables can be nested within each other. The system resolves them in multiple 
 
 ## 📋 Built-in Variables
 
-完整变量文档请看 [VARIABLES.md](VARIABLES.md)。当前提供 520+ 个不同实用变量族（不是只靠生成实例计数），非 HTTP 请求变量目标解析延迟为 5ms 以内。
+完整变量文档请看 [VARIABLES.md](VARIABLES.md)。当前提供 520+ 个不同实用变量族（不是只靠生成实例计数），并且参数化工具族、用户与事件变量、环境变量、时间变量、随机变量五类均为 100+ 变量族。非 HTTP 请求变量目标解析延迟为 5ms 以内。
 
-### 👤 User Info
+### 🔧 Parameterized Utility (100+ families)
+| Variable | Description |
+|---|---|
+| `[两位7]` / `[三位7]` / `[四位7]` | Zero padding helpers |
+| `[平方9]` / `[立方3]` / `[双倍21]` | Numeric transforms |
+| `[MB2]` / `[GB2]` / `[毫秒500]` | Unit and byte helpers |
+| `[艾特10001]` / `[URL路径a b]` / `[CSS类card]` | CQ / URL / tag helpers |
+
+### 👤 User Info / Events (100+ families)
 | Variable | Description |
 |---|---|
 | `[qq]` / `[QQ号]` | Sender QQ |
@@ -233,13 +242,13 @@ Variables can be nested within each other. The system resolves them in multiple 
 | `[ai]` / `[AI号]` | Bot ID |
 | `[selfid]` / `[自身id]` | Bot self ID |
 
-### 🌍 Environment
+### 🌍 Environment (100+ families)
 | Variable | Description |
 |---|---|
 | `[group]` / `[群号]` | Group ID (group only) |
 | `[env]` / `[环境]` | Environment (group/private) |
 
-### ⏰ Time
+### ⏰ Time (100+ families)
 | Variable | Description |
 |---|---|
 | `(Y)` `(M)` `(D)` `(h)` `(m)` `(s)` | Date/Time components |
@@ -254,7 +263,7 @@ Variables can be nested within each other. The system resolves them in multiple 
 | `[闰年]` | Is leap year |
 | `[本月天数]` | Days in month |
 
-### 🎲 Random
+### 🎲 Random (100+ families)
 | Variable | Description |
 |---|---|
 | `(a-b)` | Random integer in range |
@@ -327,7 +336,7 @@ src/
     ├── common.hpp              # Core Types (Event, Config, AdapterType, AdapterConfig)
     ├── storage.hpp / .cpp      # Thread-safe File Storage (shared_mutex)
     ├── lexicon_engine.hpp/.cpp # Lexicon Engine (CRUD + [n.?] Matching)
-    ├── variable_engine.hpp     # Nested Variable Engine (520+ Variable Families, 52-level Recursion)
+    ├── variable_engine.hpp     # Nested Variable Engine (520+ Families + 5×100+ Categories, 52-level Recursion)
     ├── variable_engine.cpp     # Variable Engine Extension
     ├── onebot_adapter.hpp      # Multi-Protocol Adapter (BotConnection + AdapterManager)
     ├── onebot_adapter.cpp      # Adapter Extension
