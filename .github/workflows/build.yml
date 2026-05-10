@@ -1,0 +1,155 @@
+name: Build VanBot
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        compiler: [gcc, clang]
+        include:
+          - compiler: gcc
+            cc: gcc
+            cxx: g++
+          - compiler: clang
+            cc: clang
+            cxx: clang++
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 📦 Install vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: '2024.12.16'
+
+      - name: 🔧 Configure CMake
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+            -DCMAKE_C_COMPILER=${{ matrix.cc }} \
+            -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
+            -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+
+      - name: 🏗️ Build
+        run: cmake --build build --config ${{ env.BUILD_TYPE }} -j$(nproc)
+
+      - name: 📤 Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vanbot-linux-${{ matrix.compiler }}
+          path: build/vanbot
+          retention-days: 30
+
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 📦 Install vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: '2024.12.16'
+
+      - name: 🔧 Configure CMake
+        run: |
+          cmake -B build `
+            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+
+      - name: 🏗️ Build
+        run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel
+
+      - name: 📤 Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vanbot-windows-msvc
+          path: build/${{ env.BUILD_TYPE }}/vanbot.exe
+          retention-days: 30
+
+  release:
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 📥 Download Linux GCC
+        uses: actions/download-artifact@v4
+        with:
+          name: vanbot-linux-gcc
+          path: release/
+
+      - name: 📥 Download Linux Clang
+        uses: actions/download-artifact@v4
+        with:
+          name: vanbot-linux-clang
+          path: release/
+
+      - name: 📥 Download Windows MSVC
+        uses: actions/download-artifact@v4
+        with:
+          name: vanbot-windows-msvc
+          path: release/
+
+      - name: 📦 Package
+        run: |
+          chmod +x release/vanbot
+          mv release/vanbot release/vanbot-linux-gcc
+          mv release/vanbot-linux-clang release/vanbot-linux-clang || true
+          mv release/vanbot.exe release/vanbot-windows.exe || true
+
+      - name: 🚀 Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v3.0.0-nightly
+          name: "VanBot v3.0.0 Nightly Build"
+          body: |
+            🌸 VanBot v3.0.0 - 高性能 C++ QQ 关键词词库机器人
+            多适配器 · 嵌套变量 · 可爱系TUI
+            
+            ## 下载
+            - `vanbot-linux-gcc` - Linux GCC 编译版本
+            - `vanbot-linux-clang` - Linux Clang 编译版本
+            - `vanbot-windows.exe` - Windows MSVC 编译版本
+            
+            ## 使用
+            ```bash
+            # Linux - 单适配器
+            chmod +x vanbot-linux-gcc
+            ./vanbot-linux-gcc --ws ws://127.0.0.1:6700
+            
+            # 多适配器
+            ./vanbot-linux-gcc \
+              --add-adapter bot1 forward ws://localhost:6700 \
+              --add-adapter bot2 reverse 9800 \
+              --add-adapter bot3 milky ws://localhost:8765
+            
+            # Windows
+            vanbot-windows.exe --ws ws://127.0.0.1:6700
+            ```
+          files: |
+            release/vanbot-linux-gcc
+            release/vanbot-linux-clang
+            release/vanbot-windows.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

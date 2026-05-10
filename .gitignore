@@ -1,0 +1,32 @@
+# Build
+build/
+cmake-build-*/
+out/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Compiled
+*.o
+*.obj
+*.exe
+*.out
+*.app
+/vanbot
+
+# vcpkg
+vcpkg_installed/
+
+# Data
+Van_keyword/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

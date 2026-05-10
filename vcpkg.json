@@ -1,0 +1,12 @@
+{
+  "name": "vanbot",
+  "version": "3.0.0",
+  "description": "VanBot - High-performance QQ keyword bot in C++",
+  "dependencies": [
+    "ftxui",
+    "nlohmann-json",
+    "spdlog",
+    "cpp-httplib",
+    "ixwebsocket"
+  ]
+}
