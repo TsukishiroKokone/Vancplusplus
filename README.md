@@ -12,7 +12,7 @@
 
 ### Technology stack:
 - Primary development language ： **C Plus Plus [C++]** (C++20)
-- Configure Storage ： **INI / JSON File Storage**
+- Configure Storage ： **INI / JSON File Storage / SQLite Database**
 - Terminal UI ： **FTXUI (Kawaii Theme 🌸)**
 - Concurrency ： **Shared Mutex + Atomic + Thread Pool**
 - Build System ： **CMake + vcpkg**
@@ -28,7 +28,7 @@
 - [x] Van Lexicon Basic Function -> https://github.com/Van-Zone/VanBot
 - [x] Multi-Adapter Architecture (Multiple bots simultaneously)
 - [x] Nested Variable System (Up to 8 levels of recursion)
-- [x] 60+ Built-in Variables
+- [x] 100+ Built-in Variables ([VARIABLES.md](VARIABLES.md))
 - [x] Cooldown System
 - [x] Virtual Coins System
 - [x] HTTP GET Variable with LRU Cache
@@ -38,9 +38,9 @@
 - [x] Claude Code CLI-style Kawaii TUI (Sakura Pink + Mint Green)
 - [x] Cross-Platform (Linux / Windows)
 - [x] GitHub Actions CI/CD (GCC + Clang + MSVC)
-- [ ] SQLite Database Support (Planned)
-- [ ] INI Configuration File (Planned)
-- [ ] Web API (Planned)
+- [x] SQLite Database Support
+- [x] INI Configuration File
+- [x] Web API
 
 ---
 
@@ -53,6 +53,7 @@
 | [spdlog](https://github.com/gabime/spdlog) | High-performance Logging |
 | [cpp-httplib](https://github.com/yhirose/cpp-httplib) | HTTP Client (with LRU Cache) |
 | [IXWebSocket](https://github.com/machinezone/IXWebSocket) | WebSocket Client/Server |
+| [SQLite](https://sqlite.org/) | Optional SQLite persistence backend |
 
 All dependencies managed via [vcpkg](https://vcpkg.io/).
 
@@ -118,6 +119,58 @@ cmake --build build --config Release
   --milky ws://localhost:8765 milkypass
 ```
 
+### Config / Storage / Web API
+
+```bash
+# Read INI config file, default is config.ini
+./vanbot --config config.ini
+
+# Generate an INI file from current CLI options
+./vanbot --data ./Van_keyword --sqlite ./Van_keyword/van_lexicon.db --save-config config.generated.ini
+
+# Enable SQLite persistence
+./vanbot --storage sqlite --sqlite ./Van_keyword/van_lexicon.db
+
+# Enable Web API with optional token
+./vanbot --web-api --web-api-host 127.0.0.1 --web-api-port 8080 --web-api-token your_token
+```
+
+Example INI:
+
+```ini
+[main]
+data_dir=./Van_keyword
+self_trigger=true
+config_tui=true
+storage_backend=sqlite
+sqlite_path=./Van_keyword/van_lexicon.db
+
+[web_api]
+enabled=true
+host=127.0.0.1
+port=8080
+token=change_me
+
+[adapter.default]
+name=default
+type=onebot-v11-forward
+url=ws://127.0.0.1:6700
+port=6701
+access_token=
+reconnect_interval=5
+heartbeat_interval=30
+```
+
+Web API routes:
+
+| Route | Method | Description |
+|---|---|---|
+| `/api/status` | GET | Runtime stats and adapter statuses |
+| `/api/config` | GET | Current config summary without token value |
+| `/api/lexicon/<bot_id>/<data_id>` | GET | Read lexicon JSON |
+| `/api/lexicon/<bot_id>/<data_id>` | POST | Add lexicon entry using JSON body |
+| `/api/logs` | GET | Recent TUI logs |
+
 ### CLI Reference
 
 | Parameter | Description |
@@ -131,6 +184,14 @@ cmake --build build --config Release
 | `--milky <url> [token]` | Quick add Milky adapter |
 | `--self-trigger` | Enable self-trigger (default) |
 | `--no-self-trigger` | Disable self-trigger |
+| `-c, --config <file>` | Read INI config file |
+| `--storage <file\|sqlite>` | Select storage backend |
+| `--sqlite <path>` | Enable SQLite and set DB path |
+| `--web-api` / `--no-web-api` | Enable / disable Web API |
+| `--web-api-host <host>` | Web API host |
+| `--web-api-port <port>` | Web API port |
+| `--web-api-token <token>` | Web API Bearer token |
+| `--save-config <file>` | Save current config to INI file |
 | `-h, --help` | Show help |
 
 ### Adapter Types
@@ -159,6 +220,8 @@ Variables can be nested within each other. The system resolves them in multiple 
 ---
 
 ## 📋 Built-in Variables
+
+完整变量文档请看 [VARIABLES.md](VARIABLES.md)。
 
 ### 👤 User Info
 | Variable | Description |
@@ -264,7 +327,7 @@ src/
     ├── common.hpp              # Core Types (Event, Config, AdapterType, AdapterConfig)
     ├── storage.hpp / .cpp      # Thread-safe File Storage (shared_mutex)
     ├── lexicon_engine.hpp/.cpp # Lexicon Engine (CRUD + [n.?] Matching)
-    ├── variable_engine.hpp     # Nested Variable Engine (50+ Variables, 8-level Recursion)
+    ├── variable_engine.hpp     # Nested Variable Engine (100+ Variables, 8-level Recursion)
     ├── variable_engine.cpp     # Variable Engine Extension
     ├── onebot_adapter.hpp      # Multi-Protocol Adapter (BotConnection + AdapterManager)
     ├── onebot_adapter.cpp      # Adapter Extension

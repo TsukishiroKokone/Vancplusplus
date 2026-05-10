@@ -43,7 +43,7 @@ public:
 
     Bot(const Config& config)
         : m_config(config)
-        , m_storage(config.data_dir)
+        , m_storage(config.data_dir, config.storage_backend, config.sqlite_path)
         , m_lexicon(m_storage)
         , m_variables(m_storage)
         , m_cooling(m_storage)

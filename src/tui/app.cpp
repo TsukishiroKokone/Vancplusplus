@@ -113,6 +113,12 @@ int run_config_tui(Config& config) {
 
     std::string data_dir = config.data_dir;
     bool self_trigger = config.self_trigger;
+    bool sqlite_enabled = config.storage_backend == StorageBackend::SQLite;
+    bool web_api_enabled = config.web_api_enabled;
+    std::string sqlite_path = config.sqlite_path;
+    std::string web_api_host = config.web_api_host;
+    std::string web_api_port = std::to_string(config.web_api_port);
+    std::string web_api_token = config.web_api_token;
     std::vector<AdapterDraft> drafts;
     drafts.reserve(config.adapters.size());
     for (const auto& adapter : config.adapters) drafts.push_back(to_draft(adapter));
@@ -126,6 +132,10 @@ int run_config_tui(Config& config) {
     std::string notice = "使用方向键/Tab 切换，Enter 保存启动，a 添加，d 删除，t 切换协议，s 切换自触发，q 退出";
 
     auto data_input = Input(&data_dir, "./Van_keyword");
+    auto sqlite_input = Input(&sqlite_path, "./Van_keyword/van_lexicon.db");
+    auto api_host_input = Input(&web_api_host, "127.0.0.1");
+    auto api_port_input = Input(&web_api_port, "8080");
+    auto api_token_input = Input(&web_api_token, "可留空");
     std::vector<Component> adapter_inputs;
 
     auto rebuild_inputs = [&] {
@@ -143,7 +153,7 @@ int run_config_tui(Config& config) {
     rebuild_inputs();
 
     auto inputs_container = Container::Vertical(adapter_inputs);
-    auto root = Container::Vertical({data_input, inputs_container});
+    auto root = Container::Vertical({data_input, sqlite_input, api_host_input, api_port_input, api_token_input, inputs_container});
 
     auto renderer = Renderer(root, [&] {
         auto& d = drafts[selected];
@@ -173,6 +183,12 @@ int run_config_tui(Config& config) {
                 vbox({
                     hbox({ text("  数据目录") | color(DimGray) | size(WIDTH, EQUAL, 14), data_input->Render() | flex }),
                     hbox({ text("  自触发") | color(DimGray) | size(WIDTH, EQUAL, 14), text(self_trigger ? "开启" : "关闭") | color(self_trigger ? Mint : Color::Red) | bold }),
+                    hbox({ text("  SQLite") | color(DimGray) | size(WIDTH, EQUAL, 14), text(sqlite_enabled ? "开启" : "关闭") | color(sqlite_enabled ? Mint : Color::Red) | bold }),
+                    hbox({ text("  数据库") | color(DimGray) | size(WIDTH, EQUAL, 14), sqlite_input->Render() | flex }),
+                    hbox({ text("  Web API") | color(DimGray) | size(WIDTH, EQUAL, 14), text(web_api_enabled ? "开启" : "关闭") | color(web_api_enabled ? Mint : Color::Red) | bold }),
+                    hbox({ text("  API Host") | color(DimGray) | size(WIDTH, EQUAL, 14), api_host_input->Render() | flex }),
+                    hbox({ text("  API Port") | color(DimGray) | size(WIDTH, EQUAL, 14), api_port_input->Render() | flex }),
+                    hbox({ text("  API Token") | color(DimGray) | size(WIDTH, EQUAL, 14), api_token_input->Render() | flex }),
                     separator(),
                     text("  适配器列表") | color(Peach) | bold,
                     vbox(adapter_list) | flex_shrink,
@@ -190,7 +206,7 @@ int run_config_tui(Config& config) {
             hbox({
                 text(" Enter 保存启动 ") | color(Mint) | bold,
                 separator(),
-                text(" ↑↓选择适配器  a添加  d删除  t切换协议  s自触发  q退出 ") | color(DimGray),
+                text(" ↑↓适配器  a添加  d删除  t协议  s自触发  xSQLite  w WebAPI  q退出 ") | color(DimGray),
                 filler(),
                 text(" " + notice + " ") | color(Peach),
             }),
@@ -210,6 +226,14 @@ int run_config_tui(Config& config) {
         }
         if (event == ftxui::Event::Character('s')) {
             self_trigger = !self_trigger;
+            return true;
+        }
+        if (event == ftxui::Event::Character('x')) {
+            sqlite_enabled = !sqlite_enabled;
+            return true;
+        }
+        if (event == ftxui::Event::Character('w')) {
+            web_api_enabled = !web_api_enabled;
             return true;
         }
         if (event == ftxui::Event::Character('a')) {
@@ -272,6 +296,12 @@ int run_config_tui(Config& config) {
 
     config.data_dir = data_dir.empty() ? "./Van_keyword" : data_dir;
     config.self_trigger = self_trigger;
+    config.storage_backend = sqlite_enabled ? StorageBackend::SQLite : StorageBackend::File;
+    config.sqlite_path = sqlite_path.empty() ? "./Van_keyword/van_lexicon.db" : sqlite_path;
+    config.web_api_enabled = web_api_enabled;
+    config.web_api_host = web_api_host.empty() ? "127.0.0.1" : web_api_host;
+    config.web_api_port = parse_int_or(web_api_port, 8080);
+    config.web_api_token = web_api_token;
     config.adapters.clear();
     for (const auto& draft : drafts) config.adapters.push_back(from_draft(draft));
     return 0;

@@ -1,11 +1,19 @@
 #pragma once
 // ─── VanBot Storage Layer ────────────────────────────────────
-// 高并发文件操作与数据持久化
+// 高并发文件/SQLite 双后端数据持久化
 #include "common.hpp"
 #include <nlohmann/json.hpp>
+#include <sqlite3.h>
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <memory>
+#include <optional>
+#include <shared_mutex>
 #include <sstream>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 namespace vanbot {
 
@@ -14,13 +22,27 @@ using json = nlohmann::json;
 
 class Storage {
 public:
-    explicit Storage(std::string data_dir = "./Van_keyword")
-        : m_data_dir(std::move(data_dir)) {}
+    explicit Storage(std::string data_dir = "./Van_keyword",
+                     StorageBackend backend = StorageBackend::File,
+                     std::string sqlite_path = {})
+        : m_data_dir(std::move(data_dir))
+        , m_backend(backend)
+        , m_sqlite_path(std::move(sqlite_path)) {
+        if (m_sqlite_path.empty()) m_sqlite_path = (fs::path(m_data_dir) / "van_lexicon.db").string();
+    }
 
-    // ── 初始化数据目录 ──────────────────────────────────────
+    ~Storage() {
+        close_sqlite();
+    }
+
+    Storage(const Storage&) = delete;
+    Storage& operator=(const Storage&) = delete;
+
+    // ── 初始化数据目录 / SQLite schema ───────────────────────
     void init(BotId bot_id = 0) {
         auto base = fs::path(m_data_dir);
         create_dirs(base);
+        if (m_backend == StorageBackend::SQLite) init_sqlite();
         if (bot_id) {
             auto bot_dir = base / std::to_string(bot_id);
             create_dirs(bot_dir);
@@ -33,8 +55,12 @@ public:
         }
     }
 
-    // ── 文件读取（线程安全，读锁） ──────────────────────────
+    // ── 文件/SQLite 文本读取（线程安全，读锁） ────────────────
     std::optional<std::string> read(BotId bot_id, const std::string& filename) const {
+        if (m_backend == StorageBackend::SQLite && is_sqlite_managed_file(filename)) {
+            return sqlite_read_text(bot_id, filename);
+        }
+
         auto path = resolve_path(bot_id, filename);
         std::shared_lock lock(m_mutex);
         std::ifstream ifs(path, std::ios::in | std::ios::binary);
@@ -44,8 +70,12 @@ public:
         return oss.str();
     }
 
-    // ── 文件写入（线程安全，写锁） ──────────────────────────
+    // ── 文件/SQLite 文本写入（线程安全，写锁） ────────────────
     bool write(BotId bot_id, const std::string& filename, const std::string& content) {
+        if (m_backend == StorageBackend::SQLite && is_sqlite_managed_file(filename)) {
+            return sqlite_write_text(bot_id, filename, content);
+        }
+
         auto path = resolve_path(bot_id, filename);
         auto dir = fs::path(path).parent_path();
         std::unique_lock lock(m_mutex);
@@ -57,7 +87,7 @@ public:
         return true;
     }
 
-    // ── 读取 JSON 文件 ──────────────────────────────────────
+    // ── 读取 JSON 文件 / SQLite JSON 文档 ─────────────────────
     std::optional<json> read_json(BotId bot_id, const std::string& filename) const {
         auto content = read(bot_id, filename);
         if (!content) {
@@ -72,7 +102,7 @@ public:
         }
     }
 
-    // ── 写入 JSON 文件 ──────────────────────────────────────
+    // ── 写入 JSON 文件 / SQLite JSON 文档 ─────────────────────
     bool write_json(BotId bot_id, const std::string& filename, const json& data, int indent = 4) {
         return write(bot_id, filename, data.dump(indent, ' ', false, json::error_handler_t::replace));
     }
@@ -142,10 +172,15 @@ public:
     }
 
     const std::string& data_dir() const { return m_data_dir; }
+    StorageBackend backend() const { return m_backend; }
+    const std::string& sqlite_path() const { return m_sqlite_path; }
 
 private:
     std::string m_data_dir;
+    StorageBackend m_backend = StorageBackend::File;
+    std::string m_sqlite_path;
     mutable std::shared_mutex m_mutex;
+    mutable sqlite3* m_db = nullptr;
 
     std::string resolve_path(BotId bot_id, const std::string& filename) const {
         fs::path base(m_data_dir);
@@ -159,6 +194,113 @@ private:
     void create_dirs(const fs::path& p) {
         std::error_code ec;
         fs::create_directories(p, ec);
+    }
+
+    void init_sqlite() const {
+        std::unique_lock lock(m_mutex);
+        if (m_db) return;
+        auto db_path = fs::path(m_sqlite_path);
+        if (db_path.has_parent_path()) {
+            std::error_code ec;
+            fs::create_directories(db_path.parent_path(), ec);
+        }
+        if (sqlite3_open(m_sqlite_path.c_str(), &m_db) != SQLITE_OK) {
+            close_sqlite_unlocked();
+            return;
+        }
+        exec_sql_unlocked("PRAGMA journal_mode=WAL;");
+        exec_sql_unlocked("PRAGMA synchronous=NORMAL;");
+        exec_sql_unlocked("CREATE TABLE IF NOT EXISTS kv_store ("
+                          "bot_id INTEGER NOT NULL,"
+                          "name TEXT NOT NULL,"
+                          "content TEXT NOT NULL,"
+                          "updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),"
+                          "PRIMARY KEY(bot_id, name));");
+        exec_sql_unlocked("CREATE TABLE IF NOT EXISTS lexicon_entries ("
+                          "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                          "bot_id INTEGER NOT NULL,"
+                          "data_id TEXT NOT NULL,"
+                          "keyword TEXT NOT NULL,"
+                          "match_mode INTEGER NOT NULL DEFAULT 0,"
+                          "responses TEXT NOT NULL,"
+                          "updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),"
+                          "UNIQUE(bot_id, data_id, keyword));");
+        exec_sql_unlocked("CREATE TABLE IF NOT EXISTS coin_records ("
+                          "bot_id INTEGER NOT NULL,"
+                          "group_id INTEGER NOT NULL,"
+                          "user_id INTEGER NOT NULL,"
+                          "type TEXT NOT NULL,"
+                          "coins TEXT NOT NULL,"
+                          "updated_at TEXT NOT NULL,"
+                          "PRIMARY KEY(bot_id, group_id, user_id, type));");
+        exec_sql_unlocked("CREATE TABLE IF NOT EXISTS cooling_records ("
+                          "bot_id INTEGER NOT NULL,"
+                          "group_id INTEGER NOT NULL,"
+                          "user_id INTEGER NOT NULL,"
+                          "lexicon_id INTEGER NOT NULL,"
+                          "expire_time REAL NOT NULL,"
+                          "PRIMARY KEY(bot_id, group_id, user_id, lexicon_id));");
+    }
+
+    void close_sqlite() {
+        std::unique_lock lock(m_mutex);
+        close_sqlite_unlocked();
+    }
+
+    void close_sqlite_unlocked() const {
+        if (m_db) {
+            sqlite3_close(m_db);
+            m_db = nullptr;
+        }
+    }
+
+    bool exec_sql_unlocked(const char* sql) const {
+        if (!m_db) return false;
+        char* err = nullptr;
+        int rc = sqlite3_exec(m_db, sql, nullptr, nullptr, &err);
+        if (err) sqlite3_free(err);
+        return rc == SQLITE_OK;
+    }
+
+    static bool is_sqlite_managed_file(const std::string& filename) {
+        return filename.rfind("lexicon/", 0) == 0 ||
+               filename.rfind("cooling/", 0) == 0 ||
+               filename == "coins.json" ||
+               filename == "switch.txt" ||
+               filename == "select.txt" ||
+               filename == "master.txt" ||
+               filename == "admin.txt" ||
+               filename == "executive.txt";
+    }
+
+    std::optional<std::string> sqlite_read_text(BotId bot_id, const std::string& filename) const {
+        init_sqlite();
+        std::shared_lock lock(m_mutex);
+        if (!m_db) return std::nullopt;
+        sqlite3_stmt* stmt = nullptr;
+        const char* sql = "SELECT content FROM kv_store WHERE bot_id=? AND name=?";
+        if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK) return std::nullopt;
+        std::unique_ptr<sqlite3_stmt, decltype(&sqlite3_finalize)> guard(stmt, sqlite3_finalize);
+        sqlite3_bind_int64(stmt, 1, bot_id);
+        sqlite3_bind_text(stmt, 2, filename.c_str(), -1, SQLITE_TRANSIENT);
+        if (sqlite3_step(stmt) != SQLITE_ROW) return std::nullopt;
+        const unsigned char* text = sqlite3_column_text(stmt, 0);
+        return text ? std::optional<std::string>(reinterpret_cast<const char*>(text)) : std::optional<std::string>("");
+    }
+
+    bool sqlite_write_text(BotId bot_id, const std::string& filename, const std::string& content) {
+        init_sqlite();
+        std::unique_lock lock(m_mutex);
+        if (!m_db) return false;
+        sqlite3_stmt* stmt = nullptr;
+        const char* sql = "INSERT INTO kv_store(bot_id,name,content,updated_at) VALUES(?,?,?,strftime('%s','now')) "
+                          "ON CONFLICT(bot_id,name) DO UPDATE SET content=excluded.content, updated_at=excluded.updated_at";
+        if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK) return false;
+        std::unique_ptr<sqlite3_stmt, decltype(&sqlite3_finalize)> guard(stmt, sqlite3_finalize);
+        sqlite3_bind_int64(stmt, 1, bot_id);
+        sqlite3_bind_text(stmt, 2, filename.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_text(stmt, 3, content.c_str(), -1, SQLITE_TRANSIENT);
+        return sqlite3_step(stmt) == SQLITE_DONE;
     }
 
     static std::string trim(const std::string& s) {

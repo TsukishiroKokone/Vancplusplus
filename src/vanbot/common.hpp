@@ -104,11 +104,20 @@ struct CoolingRecord {
     double          expire_time = 0.0; // 时间戳
 };
 
+// ── 存储后端 ─────────────────────────────────────────────────
+enum class StorageBackend { File, SQLite };
+
 // ── 配置 ─────────────────────────────────────────────────────
 struct Config {
     bool        self_trigger = true;
     bool        config_tui   = true;       // 启动前显示 TUI 配置向导
     std::string data_dir     = "./Van_keyword";
+    StorageBackend storage_backend = StorageBackend::File;
+    std::string sqlite_path  = "./Van_keyword/van_lexicon.db";
+    bool        web_api_enabled = false;
+    std::string web_api_host = "127.0.0.1";
+    int         web_api_port = 8080;
+    std::string web_api_token;
     std::vector<AdapterConfig> adapters;  // 多适配器配置
 };
 

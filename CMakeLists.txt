@@ -11,6 +11,7 @@ find_package(nlohmann_json REQUIRED)
 find_package(spdlog REQUIRED)
 find_package(httplib REQUIRED)
 find_package(ixwebsocket REQUIRED)
+find_package(unofficial-sqlite3 REQUIRED)
 
 # ── 主可执行文件 ──────────────────────────────────────────
 add_executable(vanbot
@@ -32,6 +33,7 @@ target_link_libraries(vanbot PRIVATE
     spdlog::spdlog
     httplib::httplib
     ixwebsocket::ixwebsocket
+    unofficial::sqlite3::sqlite3
 )
 
 # Windows 特定配置

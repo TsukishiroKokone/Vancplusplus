@@ -5,6 +5,8 @@
 // MIT License
 
 #include "vanbot/bot.hpp"
+#include "vanbot/config.hpp"
+#include "vanbot/web_api.hpp"
 #include "tui/app.hpp"
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
@@ -61,6 +63,14 @@ static vanbot::AdapterType parse_adapter_type(const std::string& s) {
 // ── 解析命令行参数 ───────────────────────────────────────────
 static vanbot::Config parse_args(int argc, char* argv[]) {
     vanbot::Config config;
+    std::string config_path = "config.ini";
+    for (int i = 1; i < argc; i++) {
+        std::string arg = argv[i];
+        if ((arg == "--config" || arg == "-c") && i + 1 < argc) {
+            config_path = argv[++i];
+        }
+    }
+    vanbot::IniConfig::load(config_path, config);
 
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
@@ -123,6 +133,8 @@ static vanbot::Config parse_args(int argc, char* argv[]) {
                 adapter.access_token = argv[++i];
             }
             config.adapters.push_back(adapter);
+        } else if ((arg == "--config" || arg == "-c") && i + 1 < argc) {
+            ++i;
         } else if (arg == "--self-trigger") {
             config.self_trigger = true;
         } else if (arg == "--no-self-trigger") {
@@ -131,6 +143,23 @@ static vanbot::Config parse_args(int argc, char* argv[]) {
             config.config_tui = true;
         } else if (arg == "--no-config-tui") {
             config.config_tui = false;
+        } else if (arg == "--storage" && i + 1 < argc) {
+            config.storage_backend = vanbot::IniConfig::parse_storage_backend(argv[++i]);
+        } else if (arg == "--sqlite" && i + 1 < argc) {
+            config.storage_backend = vanbot::StorageBackend::SQLite;
+            config.sqlite_path = argv[++i];
+        } else if (arg == "--web-api") {
+            config.web_api_enabled = true;
+        } else if (arg == "--no-web-api") {
+            config.web_api_enabled = false;
+        } else if (arg == "--web-api-host" && i + 1 < argc) {
+            config.web_api_host = argv[++i];
+        } else if (arg == "--web-api-port" && i + 1 < argc) {
+            config.web_api_port = std::stoi(argv[++i]);
+        } else if (arg == "--web-api-token" && i + 1 < argc) {
+            config.web_api_token = argv[++i];
+        } else if (arg == "--save-config" && i + 1 < argc) {
+            vanbot::IniConfig::save(argv[++i], config);
         } else if (arg == "--help" || arg == "-h") {
             std::cout << R"(
 VanBot v3.0.0 - 高性能 C++ QQ 关键词词库机器人
@@ -139,6 +168,7 @@ VanBot v3.0.0 - 高性能 C++ QQ 关键词词库机器人
 用法: vanbot [选项]
 
 选项:
+  -c, --config <file>         读取 INI 配置文件 (默认: config.ini)
   -w, --ws <url>              OneBot 正向WS地址 (兼容旧参数)
   -d, --data <dir>            数据存储目录 (默认: ./Van_keyword)
   --add-adapter <name> <type> [url] [port] [token]
@@ -151,6 +181,13 @@ VanBot v3.0.0 - 高性能 C++ QQ 关键词词库机器人
   --no-self-trigger            禁用自触发
   --config-tui                 启动前打开 TUI 配置面板 (默认)
   --no-config-tui              跳过启动前 TUI 配置面板
+  --storage <file|sqlite>      存储后端
+  --sqlite <path>              启用 SQLite 并指定数据库路径
+  --web-api / --no-web-api     启用/禁用 Web API
+  --web-api-host <host>        Web API 监听地址
+  --web-api-port <port>        Web API 监听端口
+  --web-api-token <token>      Web API Bearer Token
+  --save-config <file>         将当前配置保存为 INI 文件
   -h, --help                   显示帮助信息
 
 适配器类型:
@@ -212,9 +249,14 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    vanbot::IniConfig::save("config.generated.ini", config);
+
     spdlog::info("🔧 配置:");
     spdlog::info("  数据目录: {}", config.data_dir);
     spdlog::info("  自触发: {}", config.self_trigger ? "开启" : "关闭");
+    spdlog::info("  存储后端: {}", vanbot::IniConfig::storage_backend_to_string(config.storage_backend));
+    if (config.storage_backend == vanbot::StorageBackend::SQLite) spdlog::info("  SQLite: {}", config.sqlite_path);
+    spdlog::info("  Web API: {} {}:{}", config.web_api_enabled ? "开启" : "关闭", config.web_api_host, config.web_api_port);
     spdlog::info("  适配器数量: {}", config.adapters.size());
     for (const auto& adapter : config.adapters) {
         std::string type_str;
@@ -238,11 +280,18 @@ int main(int argc, char* argv[]) {
     // 启动 Bot
     bot.start();
 
+    vanbot::WebApiServer web_api(bot, config);
+    if (config.web_api_enabled) {
+        web_api.start();
+        spdlog::info("🌐 Web API 已启动: http://{}:{}", config.web_api_host, config.web_api_port);
+    }
+
     // 启动 TUI
     spdlog::info("🎨 启动可爱系 TUI...");
     int ret = vanbot::run_tui(bot);
 
     // 停止 Bot
+    web_api.stop();
     bot.stop();
 
     return ret;

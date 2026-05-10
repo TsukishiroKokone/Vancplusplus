@@ -1,6 +1,6 @@
 #pragma once
 // ─── VanBot Variable Engine v2 ──────────────────────────────
-// 嵌套变量系统 + 50+ 内置变量
+// 嵌套变量系统 + 100+ 内置变量
 // 变量可以互相嵌套，如: [积分.0.[n.1]] → 先解析[n.1]再解析积分
 #include "common.hpp"
 #include "storage.hpp"
@@ -65,6 +65,7 @@ public:
         std::string result = text;
         result = replace_captures(result, ctx.captures);
         result = resolve_nested(result, ctx, 8);
+        result = replace_parametric_vars(result, ctx);
         result = replace_escape(result);
         result = replace_or(result);
         result = replace_error(result);
@@ -86,6 +87,7 @@ public:
             result = replace_text_magic_vars(result, ctx);
             result = replace_system_vars(result, ctx);
             result = replace_format_vars(result);
+            result = replace_parametric_vars(result, ctx);
             result = replace_captures(result, ctx.captures);
             if (result == prev) break;
         }
@@ -179,6 +181,12 @@ public:
         result = replace_all(result, "[闰年]", leap ? "是" : "否");
         int dim[] = {31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
         result = replace_all(result, "[本月天数]", std::to_string(dim[tm_now.tm_mon]));
+        result = replace_all(result, "[小时12]", std::to_string((tm_now.tm_hour % 12) == 0 ? 12 : (tm_now.tm_hour % 12)));
+        result = replace_all(result, "[上午下午]", tm_now.tm_hour < 12 ? "上午" : "下午");
+        result = replace_all(result, "[季度]", std::to_string(tm_now.tm_mon / 3 + 1));
+        result = replace_all(result, "[本年第几周]", std::to_string(tm_now.tm_yday / 7 + 1));
+        std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", &tm_now);
+        result = replace_all(result, "[ISO日期]", buf);
         return result;
     }
 
@@ -202,18 +210,23 @@ public:
         std::uniform_int_distribution<int> d09(0, 9);
         std::uniform_int_distribution<int> d015(0, 15);
         std::uniform_int_distribution<int> d01(0, 1);
-        result = replace_all(result, "[随机字母]", std::string(1, 'a' + d025(m_rng)));
-        result = replace_all(result, "[随机大写字母]", std::string(1, 'A' + d025(m_rng)));
+        result = replace_all(result, "[随机字母]", std::string(1, static_cast<char>('a' + d025(m_rng))));
+        result = replace_all(result, "[随机大写字母]", std::string(1, static_cast<char>('A' + d025(m_rng))));
         result = replace_all(result, "[随机数字]", std::to_string(d09(m_rng)));
         result = replace_all(result, "[随机布尔]", d01(m_rng) ? "true" : "false");
         result = replace_all(result, "[随机正负]", d01(m_rng) ? "+" : "-");
         result = replace_all(result, "[随机表情]", std::vector<std::string>{"(ฅ>ω<*ฅ)", "(｡･ω･｡)", "(≧▽≦)", "(*´∀`)~♥", "(つ≧▽≦)つ"}[std::uniform_int_distribution<size_t>(0, 4)(m_rng)]);
         result = replace_all(result, "[随机颜色]", std::vector<std::string>{"粉色", "薄荷绿", "天蓝", "薰衣草紫", "蜜桃橙", "奶油白"}[std::uniform_int_distribution<size_t>(0, 5)(m_rng)]);
+        result = replace_all(result, "[随机动物]", std::vector<std::string>{"猫猫", "兔兔", "狐狸", "企鹅", "水獭", "熊猫", "小狗", "仓鼠"}[std::uniform_int_distribution<size_t>(0, 7)(m_rng)]);
+        result = replace_all(result, "[随机天气]", std::vector<std::string>{"晴", "多云", "小雨", "雪", "微风", "彩虹"}[std::uniform_int_distribution<size_t>(0, 5)(m_rng)]);
+        result = replace_all(result, "[随机方向]", std::vector<std::string>{"东", "南", "西", "北", "左", "右", "上", "下"}[std::uniform_int_distribution<size_t>(0, 7)(m_rng)]);
+        result = replace_all(result, "[随机稀有度]", std::vector<std::string>{"N", "R", "SR", "SSR", "UR"}[std::uniform_int_distribution<size_t>(0, 4)(m_rng)]);
+        result = replace_all(result, "[随机UUID段]", random_hex(8));
 
         if (result.find("[随机十六进制]") != std::string::npos) {
             int v = d015(m_rng);
             result = replace_all(result, "[随机十六进制]",
-                std::string(1, v < 10 ? '0' + v : 'a' + v - 10));
+                std::string(1, static_cast<char>(v < 10 ? '0' + v : 'a' + v - 10)));
         }
         return result;
     }
@@ -227,6 +240,11 @@ public:
         result = replace_all(result, "[词汇量]", std::to_string(ctx.lexicon_n));
         result = replace_all(result, "[选择的词库]", ctx.select_lexicon);
         result = replace_all(result, "[使用的词库]", ctx.user_lexicon);
+        result = replace_all(result, "[收发总数]", std::to_string(ctx.recv_count + ctx.send_count));
+        result = replace_all(result, "[消息序号]", std::to_string(ctx.recv_count));
+        result = replace_all(result, "[回复序号]", std::to_string(ctx.send_count));
+        result = replace_all(result, "[当前bot]", std::to_string(ctx.bot_id));
+        result = replace_all(result, "[当前环境id]", std::to_string(ctx.env_id));
         return result;
     }
 
@@ -280,6 +298,13 @@ public:
         result = replace_all(result, "[是否私聊]", ctx.env == Env::Private ? "true" : "false");
         result = replace_all(result, "[bot]", std::to_string(ctx.bot_id));
         result = replace_all(result, "[机器人]", std::to_string(ctx.bot_id));
+        result = replace_all(result, "[发送者]", std::to_string(ctx.event_user_id));
+        result = replace_all(result, "[发送者名称]", ctx.event_sender_name);
+        result = replace_all(result, "[发送者名片]", ctx.event_sender_card);
+        result = replace_all(result, "[事件bot]", std::to_string(ctx.event_self_id));
+        result = replace_all(result, "[事件群]", std::to_string(ctx.event_group_id));
+        result = replace_all(result, "[事件消息]", std::to_string(ctx.event_message_id));
+        result = replace_all(result, "[事件目标]", std::to_string(ctx.event_target_id));
         return result;
     }
 
@@ -299,6 +324,20 @@ public:
         result = replace_all(result, "[空]", "");
         result = replace_all(result, "[换行]", "\n");
         result = replace_all(result, "[制表符]", "\t");
+        result = replace_all(result, "[左中括号]", "[");
+        result = replace_all(result, "[右中括号]", "]");
+        result = replace_all(result, "[左小括号]", "(");
+        result = replace_all(result, "[右小括号]", ")");
+        result = replace_all(result, "[点]", ".");
+        result = replace_all(result, "[逗号]", ",");
+        result = replace_all(result, "[冒号]", ":");
+        result = replace_all(result, "[分号]", ";");
+        result = replace_all(result, "[斜杠]", "/");
+        result = replace_all(result, "[反斜杠]", "\\");
+        result = replace_all(result, "[真]", "true");
+        result = replace_all(result, "[假]", "false");
+        result = replace_all(result, "[是]", "是");
+        result = replace_all(result, "[否]", "否");
         return result;
     }
 
@@ -531,6 +570,188 @@ public:
 private:
     Storage& m_storage;
     mutable std::mt19937 m_rng{std::random_device{}()};
+
+    std::string random_hex(size_t length) const {
+        static constexpr char hex[] = "0123456789abcdef";
+        std::uniform_int_distribution<int> dist(0, 15);
+        std::string out;
+        out.reserve(length);
+        for (size_t i = 0; i < length; i++) out.push_back(hex[dist(m_rng)]);
+        return out;
+    }
+
+    static std::string bool_text(bool value) { return value ? "true" : "false"; }
+
+    static int to_int_or(const std::string& value, int fallback = 0) {
+        try { return std::stoi(trim(value)); } catch (...) { return fallback; }
+    }
+
+    static double to_double_or(const std::string& value, double fallback = 0.0) {
+        try { return std::stod(trim(value)); } catch (...) { return fallback; }
+    }
+
+    static std::string url_encode(const std::string& value) {
+        static constexpr char hex[] = "0123456789ABCDEF";
+        std::string out;
+        for (unsigned char ch : value) {
+            if (std::isalnum(ch) || ch == '-' || ch == '_' || ch == '.' || ch == '~') {
+                out.push_back(static_cast<char>(ch));
+            } else if (ch == ' ') {
+                out += "%20";
+            } else {
+                out.push_back('%');
+                out.push_back(hex[ch >> 4]);
+                out.push_back(hex[ch & 0x0F]);
+            }
+        }
+        return out;
+    }
+
+    static std::string json_escape(const std::string& value) {
+        std::string out;
+        for (char ch : value) {
+            switch (ch) {
+                case '\\': out += "\\\\"; break;
+                case '"': out += "\\\""; break;
+                case '\n': out += "\\n"; break;
+                case '\r': out += "\\r"; break;
+                case '\t': out += "\\t"; break;
+                default: out.push_back(ch); break;
+            }
+        }
+        return out;
+    }
+
+    static std::string cq_escape(const std::string& value) {
+        std::string out = value;
+        out = replace_all(out, "&", "&");
+        out = replace_all(out, "[", "[");
+        out = replace_all(out, "]", "]");
+        out = replace_all(out, ",", "&#44;");
+        return out;
+    }
+
+    static std::string replace_regex_one_arg(const std::string& input, const std::regex& re,
+                                             const std::function<std::string(const std::string&)>& fn) {
+        std::smatch m;
+        std::string::const_iterator it = input.cbegin();
+        std::string out;
+        while (std::regex_search(it, input.cend(), m, re)) {
+            out.append(it, m[0].first);
+            out += fn(m[1].str());
+            it = m[0].second;
+        }
+        if (it != input.cend()) out.append(it, input.cend());
+        return out.empty() ? input : out;
+    }
+
+    static std::string replace_regex_two_args(const std::string& input, const std::regex& re,
+                                              const std::function<std::string(const std::string&, const std::string&)>& fn) {
+        std::smatch m;
+        std::string::const_iterator it = input.cbegin();
+        std::string out;
+        while (std::regex_search(it, input.cend(), m, re)) {
+            out.append(it, m[0].first);
+            out += fn(m[1].str(), m[2].str());
+            it = m[0].second;
+        }
+        if (it != input.cend()) out.append(it, input.cend());
+        return out.empty() ? input : out;
+    }
+
+    static std::string replace_regex_three_args(const std::string& input, const std::regex& re,
+                                                const std::function<std::string(const std::string&, const std::string&, const std::string&)>& fn) {
+        std::smatch m;
+        std::string::const_iterator it = input.cbegin();
+        std::string out;
+        while (std::regex_search(it, input.cend(), m, re)) {
+            out.append(it, m[0].first);
+            out += fn(m[1].str(), m[2].str(), m[3].str());
+            it = m[0].second;
+        }
+        if (it != input.cend()) out.append(it, input.cend());
+        return out.empty() ? input : out;
+    }
+
+    std::string replace_parametric_vars(const std::string& text, const VarContext& ctx) const {
+        std::string result = text;
+        (void)ctx;
+
+        static const std::regex rand_int_re(R"(\[随机数\.(-?\d+)\.(-?\d+)\])");
+        result = replace_regex_two_args(result, rand_int_re, [&](const std::string& a, const std::string& b) {
+            int lo = to_int_or(a), hi = to_int_or(b);
+            if (lo > hi) std::swap(lo, hi);
+            return std::to_string(std::uniform_int_distribution<int>(lo, hi)(m_rng));
+        });
+
+        static const std::regex rand_pick_re(R"(\[随机选择\.([^\]]+)\])");
+        {
+            std::smatch m; std::string::const_iterator it = result.cbegin(); std::string out;
+            while (std::regex_search(it, result.cend(), m, rand_pick_re)) {
+                out.append(it, m[0].first);
+                auto parts = split(m[1].str(), "|");
+                if (parts.empty()) out += "";
+                else out += parts[std::uniform_int_distribution<size_t>(0, parts.size() - 1)(m_rng)];
+                it = m[0].second;
+            }
+            if (it != result.cend()) out.append(it, result.cend());
+            if (!out.empty() && out != result) result = out;
+        }
+
+        static const std::regex repeat_re(R"(\[循环\.(\d+)\.([^\]]+)\])");
+        result = replace_regex_two_args(result, repeat_re, [](const std::string& n, const std::string& s) {
+            int count = (std::min)(to_int_or(n), 1000);
+            std::string out;
+            for (int i = 0; i < count; i++) out += s;
+            return out;
+        });
+
+        static const std::regex right_re(R"(\[右截取\.(\d+)\.([^\]]+)\])");
+        result = replace_regex_two_args(result, right_re, [](const std::string& n, const std::string& s) {
+            size_t count = static_cast<size_t>((std::max)(0, to_int_or(n)));
+            return s.size() > count ? s.substr(s.size() - count) : s;
+        });
+
+        static const std::regex mid_re(R"(\[取中\.(\d+)\.(\d+)\.([^\]]+)\])");
+        result = replace_regex_three_args(result, mid_re, [](const std::string& start, const std::string& len, const std::string& s) {
+            size_t pos = static_cast<size_t>((std::max)(0, to_int_or(start)));
+            size_t count = static_cast<size_t>((std::max)(0, to_int_or(len)));
+            if (pos >= s.size()) return std::string{};
+            return s.substr(pos, count);
+        });
+
+        static const std::regex contains_re(R"(\[包含\.([^\]]*)\.([^\]]*)\])");
+        result = replace_regex_two_args(result, contains_re, [](const std::string& s, const std::string& needle) { return bool_text(s.find(needle) != std::string::npos); });
+        static const std::regex starts_re(R"(\[开头是\.([^\]]*)\.([^\]]*)\])");
+        result = replace_regex_two_args(result, starts_re, [](const std::string& s, const std::string& prefix) { return bool_text(s.rfind(prefix, 0) == 0); });
+        static const std::regex ends_re(R"(\[结尾是\.([^\]]*)\.([^\]]*)\])");
+        result = replace_regex_two_args(result, ends_re, [](const std::string& s, const std::string& suffix) { return bool_text(s.size() >= suffix.size() && s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0); });
+        static const std::regex eq_re(R"(\[相等\.([^\]]*)\.([^\]]*)\])");
+        result = replace_regex_two_args(result, eq_re, [](const std::string& a, const std::string& b) { return bool_text(a == b); });
+        static const std::regex ne_re(R"(\[不等\.([^\]]*)\.([^\]]*)\])");
+        result = replace_regex_two_args(result, ne_re, [](const std::string& a, const std::string& b) { return bool_text(a != b); });
+        static const std::regex gt_re(R"(\[大于\.([^\]]*)\.([^\]]*)\])");
+        result = replace_regex_two_args(result, gt_re, [](const std::string& a, const std::string& b) { return bool_text(to_double_or(a) > to_double_or(b)); });
+        static const std::regex lt_re(R"(\[小于\.([^\]]*)\.([^\]]*)\])");
+        result = replace_regex_two_args(result, lt_re, [](const std::string& a, const std::string& b) { return bool_text(to_double_or(a) < to_double_or(b)); });
+        static const std::regex ge_re(R"(\[大于等于\.([^\]]*)\.([^\]]*)\])");
+        result = replace_regex_two_args(result, ge_re, [](const std::string& a, const std::string& b) { return bool_text(to_double_or(a) >= to_double_or(b)); });
+        static const std::regex le_re(R"(\[小于等于\.([^\]]*)\.([^\]]*)\])");
+        result = replace_regex_two_args(result, le_re, [](const std::string& a, const std::string& b) { return bool_text(to_double_or(a) <= to_double_or(b)); });
+        static const std::regex max_re(R"(\[最大\.([^\]]*)\.([^\]]*)\])");
+        result = replace_regex_two_args(result, max_re, [](const std::string& a, const std::string& b) { return std::to_string((std::max)(to_double_or(a), to_double_or(b))); });
+        static const std::regex min_re(R"(\[最小\.([^\]]*)\.([^\]]*)\])");
+        result = replace_regex_two_args(result, min_re, [](const std::string& a, const std::string& b) { return std::to_string((std::min)(to_double_or(a), to_double_or(b))); });
+
+        static const std::regex url_re(R"(\[url编码\.([^\]]*)\])");
+        static const std::regex json_re(R"(\[json转义\.([^\]]*)\])");
+        static const std::regex cq_re(R"(\[CQ转义\.([^\]]*)\])");
+        result = replace_regex_one_arg(result, url_re, [](const std::string& s) { return url_encode(s); });
+        result = replace_regex_one_arg(result, json_re, [](const std::string& s) { return json_escape(s); });
+        result = replace_regex_one_arg(result, cq_re, [](const std::string& s) { return cq_escape(s); });
+
+        return result;
+    }
 
     // ── 简易表达式计算 ──────────────────────────────────────
     static double simple_eval(const std::string& expr) {
