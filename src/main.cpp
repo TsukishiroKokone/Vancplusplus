@@ -13,11 +13,22 @@
 #include <memory>
 #include <csignal>
 #include <atomic>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 static std::atomic<bool> g_running{true};
 
 static void signal_handler(int sig) {
     g_running = false;
+}
+
+// ── Windows 控制台 UTF-8 支持 ────────────────────────────────
+static void setup_console_utf8() {
+#ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+#endif
 }
 
 // ── 显示启动横幅 ─────────────────────────────────────────────
@@ -116,6 +127,10 @@ static vanbot::Config parse_args(int argc, char* argv[]) {
             config.self_trigger = true;
         } else if (arg == "--no-self-trigger") {
             config.self_trigger = false;
+        } else if (arg == "--config-tui") {
+            config.config_tui = true;
+        } else if (arg == "--no-config-tui") {
+            config.config_tui = false;
         } else if (arg == "--help" || arg == "-h") {
             std::cout << R"(
 VanBot v3.0.0 - 高性能 C++ QQ 关键词词库机器人
@@ -134,6 +149,8 @@ VanBot v3.0.0 - 高性能 C++ QQ 关键词词库机器人
   --milky <url> [token]       快捷添加Milky适配器
   --self-trigger               启用自触发 (默认)
   --no-self-trigger            禁用自触发
+  --config-tui                 启动前打开 TUI 配置面板 (默认)
+  --no-config-tui              跳过启动前 TUI 配置面板
   -h, --help                   显示帮助信息
 
 适配器类型:
@@ -170,6 +187,8 @@ VanBot v3.0.0 - 高性能 C++ QQ 关键词词库机器人
 }
 
 int main(int argc, char* argv[]) {
+    setup_console_utf8();
+
     // 信号处理
     std::signal(SIGINT, signal_handler);
     std::signal(SIGTERM, signal_handler);
@@ -184,6 +203,14 @@ int main(int argc, char* argv[]) {
 
     // 解析参数
     auto config = parse_args(argc, argv);
+
+    if (config.config_tui) {
+        int config_ret = vanbot::run_config_tui(config);
+        if (config_ret != 0) {
+            spdlog::info("已取消启动");
+            return config_ret;
+        }
+    }
 
     spdlog::info("🔧 配置:");
     spdlog::info("  数据目录: {}", config.data_dir);

@@ -107,6 +107,7 @@ struct CoolingRecord {
 // ── 配置 ─────────────────────────────────────────────────────
 struct Config {
     bool        self_trigger = true;
+    bool        config_tui   = true;       // 启动前显示 TUI 配置向导
     std::string data_dir     = "./Van_keyword";
     std::vector<AdapterConfig> adapters;  // 多适配器配置
 };

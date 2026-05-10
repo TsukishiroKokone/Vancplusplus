@@ -2,16 +2,280 @@
 // 多适配器状态显示版本
 #include "app.hpp"
 #include "vanbot/bot.hpp"
+#include "vanbot/common.hpp"
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/screen_interactive.hpp>
 #include <ftxui/dom/elements.hpp>
 #include <spdlog/spdlog.h>
+#include <algorithm>
 #include <iostream>
+#include <string>
+#include <vector>
 
 namespace vanbot {
 
 using namespace ftxui;
 using namespace kawaii;
+
+namespace {
+
+std::string adapter_type_to_string(AdapterType type) {
+    switch (type) {
+        case AdapterType::OneBotForwardWS: return "OneBot v11 正向WS";
+        case AdapterType::OneBotReverseWS: return "OneBot v11 反向WS";
+        case AdapterType::OneBotV12ForwardWS: return "OneBot v12 正向WS";
+        case AdapterType::OneBotV12ReverseWS: return "OneBot v12 反向WS";
+        case AdapterType::Milky: return "Milky";
+        default: return "Unknown";
+    }
+}
+
+AdapterType next_adapter_type(AdapterType type) {
+    switch (type) {
+        case AdapterType::OneBotForwardWS: return AdapterType::OneBotReverseWS;
+        case AdapterType::OneBotReverseWS: return AdapterType::OneBotV12ForwardWS;
+        case AdapterType::OneBotV12ForwardWS: return AdapterType::OneBotV12ReverseWS;
+        case AdapterType::OneBotV12ReverseWS: return AdapterType::Milky;
+        case AdapterType::Milky: return AdapterType::OneBotForwardWS;
+        default: return AdapterType::OneBotForwardWS;
+    }
+}
+
+AdapterType prev_adapter_type(AdapterType type) {
+    switch (type) {
+        case AdapterType::OneBotForwardWS: return AdapterType::Milky;
+        case AdapterType::OneBotReverseWS: return AdapterType::OneBotForwardWS;
+        case AdapterType::OneBotV12ForwardWS: return AdapterType::OneBotReverseWS;
+        case AdapterType::OneBotV12ReverseWS: return AdapterType::OneBotV12ForwardWS;
+        case AdapterType::Milky: return AdapterType::OneBotV12ReverseWS;
+        default: return AdapterType::OneBotForwardWS;
+    }
+}
+
+bool is_reverse(AdapterType type) {
+    return type == AdapterType::OneBotReverseWS || type == AdapterType::OneBotV12ReverseWS;
+}
+
+int parse_int_or(const std::string& value, int fallback) {
+    try {
+        return std::stoi(value);
+    } catch (...) {
+        return fallback;
+    }
+}
+
+struct AdapterDraft {
+    std::string name;
+    AdapterType type = AdapterType::OneBotForwardWS;
+    std::string url;
+    std::string port;
+    std::string access_token;
+    std::string reconnect_interval;
+    std::string heartbeat_interval;
+};
+
+AdapterDraft to_draft(const AdapterConfig& adapter) {
+    return AdapterDraft{
+        adapter.name,
+        adapter.type,
+        adapter.url,
+        std::to_string(adapter.port),
+        adapter.access_token,
+        std::to_string(adapter.reconnect_interval),
+        std::to_string(adapter.heartbeat_interval),
+    };
+}
+
+AdapterConfig from_draft(const AdapterDraft& draft) {
+    AdapterConfig adapter;
+    adapter.name = draft.name.empty() ? "adapter" : draft.name;
+    adapter.type = draft.type;
+    adapter.url = draft.url.empty() ? "ws://127.0.0.1:6700" : draft.url;
+    adapter.port = parse_int_or(draft.port, 6701);
+    adapter.access_token = draft.access_token;
+    adapter.reconnect_interval = parse_int_or(draft.reconnect_interval, 5);
+    adapter.heartbeat_interval = parse_int_or(draft.heartbeat_interval, 30);
+    return adapter;
+}
+
+Element labeled_input(const std::string& label, Component input) {
+    return hbox({
+        text("  " + label) | color(DimGray) | size(WIDTH, EQUAL, 14),
+        input->Render() | flex,
+    });
+}
+
+} // namespace
+
+// ── 启动前配置 TUI ────────────────────────────────────────────
+int run_config_tui(Config& config) {
+    auto screen = ScreenInteractive::Fullscreen();
+
+    std::string data_dir = config.data_dir;
+    bool self_trigger = config.self_trigger;
+    std::vector<AdapterDraft> drafts;
+    drafts.reserve(config.adapters.size());
+    for (const auto& adapter : config.adapters) drafts.push_back(to_draft(adapter));
+    if (drafts.empty()) {
+        drafts.push_back(to_draft(AdapterConfig{}));
+        drafts.front().name = "default";
+    }
+
+    int selected = 0;
+    bool accepted = false;
+    std::string notice = "使用方向键/Tab 切换，Enter 保存启动，a 添加，d 删除，t 切换协议，s 切换自触发，q 退出";
+
+    auto data_input = Input(&data_dir, "./Van_keyword");
+    std::vector<Component> adapter_inputs;
+
+    auto rebuild_inputs = [&] {
+        adapter_inputs.clear();
+        if (drafts.empty()) drafts.push_back(to_draft(AdapterConfig{}));
+        selected = std::clamp(selected, 0, static_cast<int>(drafts.size()) - 1);
+        auto& d = drafts[selected];
+        adapter_inputs.push_back(Input(&d.name, "default"));
+        adapter_inputs.push_back(Input(&d.url, "ws://127.0.0.1:6700"));
+        adapter_inputs.push_back(Input(&d.port, "6701"));
+        adapter_inputs.push_back(Input(&d.access_token, "可留空"));
+        adapter_inputs.push_back(Input(&d.reconnect_interval, "5"));
+        adapter_inputs.push_back(Input(&d.heartbeat_interval, "30"));
+    };
+    rebuild_inputs();
+
+    auto inputs_container = Container::Vertical(adapter_inputs);
+    auto root = Container::Vertical({data_input, inputs_container});
+
+    auto renderer = Renderer(root, [&] {
+        auto& d = drafts[selected];
+        Elements adapter_list;
+        for (size_t i = 0; i < drafts.size(); ++i) {
+            const auto& item = drafts[i];
+            auto marker = (static_cast<int>(i) == selected) ? "❯ " : "  ";
+            adapter_list.push_back(
+                hbox({
+                    text(marker) | color(static_cast<int>(i) == selected ? HotPink : DimGray),
+                    text(item.name.empty() ? "adapter" : item.name) | bold | color(static_cast<int>(i) == selected ? Peach : SkyBlue),
+                    text(" · ") | color(DimGray),
+                    text(adapter_type_to_string(item.type)) | color(Mint),
+                    text(is_reverse(item.type) ? (" · port=" + item.port) : (" · url=" + item.url)) | color(DimGray),
+                })
+            );
+        }
+
+        auto endpoint_label = is_reverse(d.type) ? "监听端口" : "WS 地址";
+        auto endpoint_input = is_reverse(d.type) ? adapter_inputs[2] : adapter_inputs[1];
+
+        return vbox({
+            kawaii_header(),
+            kawaii_separator(),
+            window(
+                text(" ✧ startup config · 启动配置 ") | color(HotPink) | bold,
+                vbox({
+                    hbox({ text("  数据目录") | color(DimGray) | size(WIDTH, EQUAL, 14), data_input->Render() | flex }),
+                    hbox({ text("  自触发") | color(DimGray) | size(WIDTH, EQUAL, 14), text(self_trigger ? "开启" : "关闭") | color(self_trigger ? Mint : Color::Red) | bold }),
+                    separator(),
+                    text("  适配器列表") | color(Peach) | bold,
+                    vbox(adapter_list) | flex_shrink,
+                    separator(),
+                    text("  当前适配器详情") | color(Peach) | bold,
+                    hbox({ text("  名称") | color(DimGray) | size(WIDTH, EQUAL, 14), adapter_inputs[0]->Render() | flex }),
+                    hbox({ text("  协议") | color(DimGray) | size(WIDTH, EQUAL, 14), text(adapter_type_to_string(d.type)) | color(SkyBlue) | bold }),
+                    hbox({ text("  " + std::string(endpoint_label)) | color(DimGray) | size(WIDTH, EQUAL, 14), endpoint_input->Render() | flex }),
+                    hbox({ text("  Token") | color(DimGray) | size(WIDTH, EQUAL, 14), adapter_inputs[3]->Render() | flex }),
+                    hbox({ text("  重连秒数") | color(DimGray) | size(WIDTH, EQUAL, 14), adapter_inputs[4]->Render() | flex }),
+                    hbox({ text("  心跳秒数") | color(DimGray) | size(WIDTH, EQUAL, 14), adapter_inputs[5]->Render() | flex }),
+                })
+            ) | bgcolor((Color::RGB)(250, 250, 255)) | flex,
+            kawaii_bottom_separator(),
+            hbox({
+                text(" Enter 保存启动 ") | color(Mint) | bold,
+                separator(),
+                text(" ↑↓选择适配器  a添加  d删除  t切换协议  s自触发  q退出 ") | color(DimGray),
+                filler(),
+                text(" " + notice + " ") | color(Peach),
+            }),
+        });
+    });
+
+    auto component = CatchEvent(renderer, [&](ftxui::Event event) {
+        if (event == ftxui::Event::Return) {
+            accepted = true;
+            screen.Exit();
+            return true;
+        }
+        if (event == ftxui::Event::Character('q') || event == ftxui::Event::Escape) {
+            accepted = false;
+            screen.Exit();
+            return true;
+        }
+        if (event == ftxui::Event::Character('s')) {
+            self_trigger = !self_trigger;
+            return true;
+        }
+        if (event == ftxui::Event::Character('a')) {
+            AdapterDraft d = to_draft(AdapterConfig{});
+            d.name = "adapter" + std::to_string(drafts.size() + 1);
+            drafts.push_back(d);
+            selected = static_cast<int>(drafts.size()) - 1;
+            rebuild_inputs();
+            inputs_container->DetachAllChildren();
+            for (auto& input : adapter_inputs) inputs_container->Add(input);
+            return true;
+        }
+        if (event == ftxui::Event::Character('d')) {
+            if (drafts.size() > 1) {
+                drafts.erase(drafts.begin() + selected);
+                selected = (std::min)(selected, static_cast<int>(drafts.size()) - 1);
+                rebuild_inputs();
+                inputs_container->DetachAllChildren();
+                for (auto& input : adapter_inputs) inputs_container->Add(input);
+            } else {
+                notice = "至少保留一个适配器喵";
+            }
+            return true;
+        }
+        if (event == ftxui::Event::Character('t')) {
+            drafts[selected].type = next_adapter_type(drafts[selected].type);
+            return true;
+        }
+        if (event == ftxui::Event::ArrowUp) {
+            if (selected > 0) {
+                --selected;
+                rebuild_inputs();
+                inputs_container->DetachAllChildren();
+                for (auto& input : adapter_inputs) inputs_container->Add(input);
+            }
+            return true;
+        }
+        if (event == ftxui::Event::ArrowDown) {
+            if (selected + 1 < static_cast<int>(drafts.size())) {
+                ++selected;
+                rebuild_inputs();
+                inputs_container->DetachAllChildren();
+                for (auto& input : adapter_inputs) inputs_container->Add(input);
+            }
+            return true;
+        }
+        if (event == ftxui::Event::ArrowLeft) {
+            drafts[selected].type = prev_adapter_type(drafts[selected].type);
+            return true;
+        }
+        if (event == ftxui::Event::ArrowRight) {
+            drafts[selected].type = next_adapter_type(drafts[selected].type);
+            return true;
+        }
+        return false;
+    });
+
+    screen.Loop(component);
+    if (!accepted) return 1;
+
+    config.data_dir = data_dir.empty() ? "./Van_keyword" : data_dir;
+    config.self_trigger = self_trigger;
+    config.adapters.clear();
+    for (const auto& draft : drafts) config.adapters.push_back(from_draft(draft));
+    return 0;
+}
 
 // ── 主 TUI 循环 ──────────────────────────────────────────────
 int run_tui(Bot& bot) {
@@ -19,7 +283,6 @@ int run_tui(Bot& bot) {
 
     // 滚动偏移
     int scroll_y = 0;
-    bool running = true;
 
     // 渲染主界面
     auto renderer = Renderer([&] {

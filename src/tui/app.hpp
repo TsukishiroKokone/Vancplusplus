@@ -17,6 +17,8 @@
 namespace vanbot {
 
 class Bot;
+struct Config;
+int run_config_tui(Config& config);
 int run_tui(Bot& bot);
 
 // ── 可爱配色方案 ─────────────────────────────────────────────
@@ -24,17 +26,17 @@ namespace kawaii {
     using namespace ftxui;
 
     // 颜色定义
-    const Color Pink      = Color::RGB(255, 182, 193);   // 樱花粉
-    const Color HotPink   = Color::RGB(255, 105, 180);   // 热粉红
-    const Color Mint      = Color::RGB(152, 251, 152);   // 薄荷绿
-    const Color Lavender  = Color::RGB(230, 230, 250);   // 薰衣草
-    const Color Peach     = Color::RGB(255, 218, 185);   // 蜜桃色
-    const Color SkyBlue   = Color::RGB(135, 206, 235);   // 天空蓝
-    const Color SoftWhite = Color::RGB(248, 250, 252);   // 柔和白
-    const Color DimGray   = Color::RGB(100, 116, 139);   // 暗灰
-    const Color RoseBg    = Color::RGB(255, 240, 245);   // 玫瑰背景
-    const Color MintBg    = Color::RGB(240, 255, 240);   // 薄荷背景
-    const Color GoldBg    = Color::RGB(255, 250, 240);   // 金色背景
+    const Color Pink      = (Color::RGB)(255, 182, 193);   // 樱花粉
+    const Color HotPink   = (Color::RGB)(255, 105, 180);   // 热粉红
+    const Color Mint      = (Color::RGB)(152, 251, 152);   // 薄荷绿
+    const Color Lavender  = (Color::RGB)(230, 230, 250);   // 薰衣草
+    const Color Peach     = (Color::RGB)(255, 218, 185);   // 蜜桃色
+    const Color SkyBlue   = (Color::RGB)(135, 206, 235);   // 天空蓝
+    const Color SoftWhite = (Color::RGB)(248, 250, 252);   // 柔和白
+    const Color DimGray   = (Color::RGB)(100, 116, 139);   // 暗灰
+    const Color RoseBg    = (Color::RGB)(255, 240, 245);   // 玫瑰背景
+    const Color MintBg    = (Color::RGB)(240, 255, 240);   // 薄荷背景
+    const Color GoldBg    = (Color::RGB)(255, 250, 240);   // 金色背景
 
     // ── 可爱装饰元素 ─────────────────────────────────────────
     inline Element kawaii_header() {
@@ -44,7 +46,7 @@ namespace kawaii {
             text("  kawaii code console") | color(Lavender),
             filler(),
             text("♡ onebot v11/v12 · milky ♡ ") | color(Peach),
-        }) | bgcolor(Color::RGB(24, 24, 37));
+        }) | bgcolor((Color::RGB)(24, 24, 37));
     }
 
     inline Element kawaii_separator() {
@@ -141,7 +143,7 @@ namespace kawaii {
         return window(
             text(" ✧ event stream ") | color(Mint) | bold,
             vbox(log_lines) | flex
-        ) | bgcolor(Color::RGB(250, 250, 255));
+        ) | bgcolor((Color::RGB)(250, 250, 255));
     }
 
     // ── 最近消息面板 ────────────────────────────────────────
@@ -164,6 +166,7 @@ namespace kawaii {
             vbox({
                 text("  [q] 退出  [c] 清除日志") | color(DimGray),
                 text("  [↑↓] 滚动日志  [r] 重连") | color(DimGray),
+                text("  启动前会进入配置面板") | color(DimGray),
             })
         ) | bgcolor(MintBg);
     }
