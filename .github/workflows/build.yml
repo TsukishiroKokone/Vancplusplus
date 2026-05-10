@@ -9,6 +9,7 @@ on:
 
 env:
   BUILD_TYPE: Release
+  VCPKG_COMMIT: 5e5d0e1c9f1ef4bdb3dbe3cfd22b3c6f0a1f4f29
 
 jobs:
   build-linux:
@@ -29,16 +30,25 @@ jobs:
       - name: 📥 Checkout
         uses: actions/checkout@v4
 
-      - name: 📦 Setup vcpkg
-        uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgDirectory: ${{ github.workspace }}/vcpkg
-          vcpkgGitCommitId: 5e5d0e1c9f1ef4bdb3dbe3cfd22b3c6f0a1f4f29
-
-      - name: 🔧 Install Linux build tools
+      - name: 🔧 Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build pkg-config curl zip unzip tar
+          sudo apt-get install -y \
+            ninja-build \
+            pkg-config \
+            curl \
+            zip \
+            unzip \
+            tar \
+            git
+
+      - name: 📦 Setup vcpkg
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git
+          cd vcpkg
+          git checkout $VCPKG_COMMIT
+          ./bootstrap-vcpkg.sh
+          ./vcpkg install --triplet x64-linux
 
       - name: 🔧 Configure CMake
         env:
@@ -49,7 +59,8 @@ jobs:
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
             -DCMAKE_C_COMPILER=${{ matrix.cc }} \
             -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
-            -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake
+            -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake \
+            -DVCPKG_TARGET_TRIPLET=x64-linux
 
       - name: 🏗️ Build
         run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel
@@ -58,9 +69,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: vanbot-linux-${{ matrix.compiler }}
-          path: |
-            build/vanbot
-            build/vanbot.exe
+          path: build/vanbot
           if-no-files-found: error
           retention-days: 30
 
@@ -73,17 +82,21 @@ jobs:
         uses: actions/checkout@v4
 
       - name: 📦 Setup vcpkg
-        uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgDirectory: ${{ github.workspace }}/vcpkg
-          vcpkgGitCommitId: 5e5d0e1c9f1ef4bdb3dbe3cfd22b3c6f0a1f4f29
+        shell: pwsh
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git
+          cd vcpkg
+          git checkout $env:VCPKG_COMMIT
+          .\bootstrap-vcpkg.bat
+          .\vcpkg install --triplet x64-windows
 
       - name: 🔧 Configure CMake
         shell: pwsh
         run: |
           cmake -S . -B build -G Ninja `
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} `
-            -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake"
+            -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows
 
       - name: 🏗️ Build
         run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel
@@ -94,7 +107,7 @@ jobs:
           name: vanbot-windows-msvc
           path: |
             build/vanbot.exe
-            build/${{ env.BUILD_TYPE }}/vanbot.exe
+            build/Release/vanbot.exe
           if-no-files-found: error
           retention-days: 30
 
@@ -132,17 +145,13 @@ jobs:
         shell: bash
         run: |
           set -e
-          if [ -f release/linux-gcc/vanbot ]; then
-            chmod +x release/linux-gcc/vanbot
-            cp release/linux-gcc/vanbot release/vanbot-linux-gcc
-          fi
-          if [ -f release/linux-clang/vanbot ]; then
-            chmod +x release/linux-clang/vanbot
-            cp release/linux-clang/vanbot release/vanbot-linux-clang
-          fi
+          chmod +x release/linux-gcc/vanbot
+          chmod +x release/linux-clang/vanbot
+          cp release/linux-gcc/vanbot release/vanbot-linux-gcc
+          cp release/linux-clang/vanbot release/vanbot-linux-clang
           if [ -f release/windows/vanbot.exe ]; then
             cp release/windows/vanbot.exe release/vanbot-windows.exe
-          elif [ -f release/windows/Release/vanbot.exe ]; then
+          else
             cp release/windows/Release/vanbot.exe release/vanbot-windows.exe
           fi
           ls -la release
@@ -155,27 +164,6 @@ jobs:
           body: |
             🌸 VanBot v3.0.0 - 高性能 C++ QQ 关键词词库机器人
             多适配器 · 嵌套变量 · 可爱系TUI
-
-            ## 下载
-            - `vanbot-linux-gcc` - Linux GCC 编译版本
-            - `vanbot-linux-clang` - Linux Clang 编译版本
-            - `vanbot-windows.exe` - Windows MSVC 编译版本
-
-            ## 使用
-            ```bash
-            # Linux - 单适配器
-            chmod +x vanbot-linux-gcc
-            ./vanbot-linux-gcc --ws ws://127.0.0.1:6700
-
-            # 多适配器
-            ./vanbot-linux-gcc \
-              --add-adapter bot1 forward ws://localhost:6700 \
-              --add-adapter bot2 reverse 9800 \
-              --add-adapter bot3 milky ws://localhost:8765
-
-            # Windows
-            vanbot-windows.exe --ws ws://127.0.0.1:6700
-            ```
           files: |
             release/vanbot-linux-gcc
             release/vanbot-linux-clang
