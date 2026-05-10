@@ -57,7 +57,7 @@ else()
     target_compile_options(vanbot PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-# ── 静态链接（Release） ──────────────────────────────────
-if(MSVC AND CMAKE_BUILD_TYPE STREQUAL "Release")
-    set_property(TARGET vanbot PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded")
+# ── MSVC 运行库静态链接：生成的 exe 不依赖 VC++ 运行库 DLL ───────
+if(MSVC)
+    set_property(TARGET vanbot PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()

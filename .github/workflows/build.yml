@@ -88,14 +88,14 @@ jobs:
           cd vcpkg
           git checkout $env:VCPKG_REF
           .\bootstrap-vcpkg.bat
-          .\vcpkg install --triplet x64-windows
+          .\vcpkg install --triplet x64-windows-static
 
       - name: 🔧 Configure CMake
         shell: pwsh
         run: |
           cmake -S . -B build -G "Visual Studio 17 2022" -A x64 `
             -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake" `
-            -DVCPKG_TARGET_TRIPLET=x64-windows
+            -DVCPKG_TARGET_TRIPLET=x64-windows-static
 
       - name: 🏗️ Build
         run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel
