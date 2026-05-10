@@ -9,7 +9,7 @@ on:
 
 env:
   BUILD_TYPE: Release
-  VCPKG_COMMIT: 5e5d0e1c9f1ef4bdb3dbe3cfd22b3c6f0a1f4f29
+  VCPKG_REF: 2024.12.16
 
 jobs:
   build-linux:
@@ -46,7 +46,7 @@ jobs:
         run: |
           git clone https://github.com/microsoft/vcpkg.git
           cd vcpkg
-          git checkout $VCPKG_COMMIT
+          git checkout $VCPKG_REF
           ./bootstrap-vcpkg.sh
           ./vcpkg install --triplet x64-linux
 
@@ -86,7 +86,7 @@ jobs:
         run: |
           git clone https://github.com/microsoft/vcpkg.git
           cd vcpkg
-          git checkout $env:VCPKG_COMMIT
+          git checkout $env:VCPKG_REF
           .\bootstrap-vcpkg.bat
           .\vcpkg install --triplet x64-windows
 
