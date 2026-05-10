@@ -114,41 +114,43 @@ public:
     // ── 用户与事件变量：100+ 变量族，一次 token 扫描解析 ─────────
     static std::string replace_user_vars(const std::string& text, const VarContext& ctx) {
         if (text.find('[') == std::string::npos) return text;
+        std::string expanded = replace_user_event_exact_species(text, ctx);
         const auto& vars = user_event_var_kinds();
         std::string out;
         out.reserve(text.size());
         bool changed = false;
-        for (size_t i = 0; i < text.size();) {
-            if (text[i] != '[') { out.push_back(text[i++]); continue; }
-            size_t end = text.find(']', i + 1);
-            if (end == std::string::npos) { out.append(text, i, std::string::npos); break; }
-            std::string token = text.substr(i, end - i + 1);
+        for (size_t i = 0; i < expanded.size();) {
+            if (expanded[i] != '[') { out.push_back(expanded[i++]); continue; }
+            size_t end = expanded.find(']', i + 1);
+            if (end == std::string::npos) { out.append(expanded, i, std::string::npos); break; }
+            std::string token = expanded.substr(i, end - i + 1);
             auto found = vars.find(token);
             if (found != vars.end()) { out += user_event_value(found->second, ctx); changed = true; }
             else out += token;
             i = end + 1;
         }
-        return changed ? out : text;
+        return changed ? out : expanded;
     }
 
     // ── 环境变量：100+ 变量族，一次 token 扫描解析 ──────────────
     static std::string replace_env_vars(const std::string& text, const VarContext& ctx) {
         if (text.find('[') == std::string::npos) return text;
+        std::string expanded = replace_env_exact_species(text, ctx);
         const auto& vars = env_var_kinds();
         std::string out;
         out.reserve(text.size());
         bool changed = false;
-        for (size_t i = 0; i < text.size();) {
-            if (text[i] != '[') { out.push_back(text[i++]); continue; }
-            size_t end = text.find(']', i + 1);
-            if (end == std::string::npos) { out.append(text, i, std::string::npos); break; }
-            std::string token = text.substr(i, end - i + 1);
+        for (size_t i = 0; i < expanded.size();) {
+            if (expanded[i] != '[') { out.push_back(expanded[i++]); continue; }
+            size_t end = expanded.find(']', i + 1);
+            if (end == std::string::npos) { out.append(expanded, i, std::string::npos); break; }
+            std::string token = expanded.substr(i, end - i + 1);
             auto found = vars.find(token);
             if (found != vars.end()) { out += env_value(found->second, ctx); changed = true; }
             else out += token;
             i = end + 1;
         }
-        return changed ? out : text;
+        return changed ? out : expanded;
     }
 
     // ── 时间变量：100+ 变量族，一次 token 扫描解析 ──────────────
@@ -162,7 +164,7 @@ public:
     #else
         localtime_r(&tm_now, &time_t_now);
     #endif
-        std::string result = text;
+        std::string result = replace_time_exact_species(text, tm_now, time_t_now);
         result = replace_all(result, "(Y)", std::to_string(tm_now.tm_year + 1900));
         result = replace_all(result, "(M)", std::to_string(tm_now.tm_mon + 1));
         result = replace_all(result, "(D)", std::to_string(tm_now.tm_mday));
@@ -192,7 +194,7 @@ public:
     std::string replace_random_vars(const std::string& text) const {
         if (text.find('[') == std::string::npos && text.find('(') == std::string::npos) return text;
         static const std::regex re(R"(\((\d+)-(\d+)\))");
-        std::string result = text;
+        std::string result = replace_random_exact_species(text);
         std::smatch match;
         std::string::const_iterator searchStart = result.cbegin();
         while (std::regex_search(searchStart, result.cend(), match, re)) {
@@ -807,6 +809,36 @@ private:
     }
 
 
+
+    static std::string scan_exact(const std::string& text, const std::unordered_map<std::string, std::string>& vars) {
+        std::string out;
+        out.reserve(text.size());
+        bool changed = false;
+        for (size_t i = 0; i < text.size();) {
+            if (text[i] != '[') { out.push_back(text[i++]); continue; }
+            size_t end = text.find(']', i + 1);
+            if (end == std::string::npos) { out.append(text, i, std::string::npos); break; }
+            std::string token = text.substr(i, end - i + 1);
+            auto it = vars.find(token);
+            if (it != vars.end()) { out += it->second; changed = true; }
+            else out += token;
+            i = end + 1;
+        }
+        return changed ? out : text;
+    }
+
+    static std::string replace_user_event_exact_species(const std::string& text, const VarContext& ctx) {
+        std::unordered_map<std::string, std::string> m;
+        auto add = [&](const std::string& k, const std::string& v){ m.emplace(bracketed(k), v); };
+        const std::string uid = std::to_string(ctx.event_user_id), self = std::to_string(ctx.event_self_id), gid = std::to_string(ctx.event_group_id ? ctx.event_group_id : ctx.env_id);
+        const std::string mid = std::to_string(ctx.event_message_id), target = std::to_string(ctx.event_target_id), bot = std::to_string(ctx.bot_id);
+        const std::vector<std::pair<std::string,std::string>> fields = {{"用户ID",uid},{"用户昵称",ctx.event_sender_name},{"用户名片",ctx.event_sender_card},{"消息ID",mid},{"BotID",bot},{"SelfID",self},{"群ID",gid},{"目标ID",target},{"环境ID",std::to_string(ctx.env_id)},{"词条ID",std::to_string(ctx.lexicon_id)},{"词库数量",std::to_string(ctx.lexicon_n)},{"接收计数",std::to_string(ctx.recv_count)},{"发送计数",std::to_string(ctx.send_count)},{"总计数",std::to_string(ctx.recv_count+ctx.send_count)},{"选择词库",ctx.select_lexicon},{"使用词库",ctx.user_lexicon},{"有昵称",bool_text(!ctx.event_sender_name.empty())},{"有名片",bool_text(!ctx.event_sender_card.empty())},{"是群聊",bool_text(ctx.env==Env::Group)},{"是私聊",bool_text(ctx.env==Env::Private)}};
+        const std::vector<std::string> aspects = {"原值","文本","数字","显示","短值","键值","CQ","JSON","INI","SQL","URL","日志","缓存","权限","路由","统计","审计","通知","调试","追踪","指标","标签","标题","文件","字段","参数","查询","索引","序号","哈希","尾号","存在","状态","范围","作用域","命名空间","会话","事件","来源","目标","发送者","接收者","操作者","机器人","平台","协议","词库","回复","冷却","积分","群聊","私聊","成员","好友","频道","角色","等级","名称","别名","昵称","名片","账号","编号","ID","Key","Value","Path","Token","Slug","Safe","Raw","Pretty","Compact","Upper","Lower","Length","Empty","NonEmpty","Mention","At","Mask","Tail4","Prefix","Suffix","Kind","Type","Mode","Flag","Bool","Count","Total","Current","Previous","Next","Min","Max","Default","Fallback","Display"};
+        size_t n = 0;
+        for (const auto& a : aspects) { const auto& f = fields[n % fields.size()]; add("用户事件种类" + two(static_cast<int>(n + 1)), f.second); add("用户事件" + a, f.second); if (++n >= 110) break; }
+        return scan_exact(text, m);
+    }
+
     static const std::unordered_map<std::string, EnvKind>& env_var_kinds() {
         static const std::unordered_map<std::string, EnvKind> vars = [] {
             std::unordered_map<std::string, EnvKind> m;
@@ -885,6 +917,18 @@ private:
     }
 
     static std::string two(int v) { return v < 10 ? "0" + std::to_string(v) : std::to_string(v); }
+
+
+    static std::string replace_env_exact_species(const std::string& text, const VarContext& ctx) {
+        std::unordered_map<std::string, std::string> m;
+        auto add = [&](const std::string& k, const std::string& v){ m.emplace(bracketed(k), v); };
+        const bool g = ctx.env == Env::Group;
+        const std::string id = std::to_string(ctx.env_id), bot = std::to_string(ctx.bot_id);
+        const std::vector<std::pair<std::string,std::string>> values = {{"ID",id},{"英文",g?"group":"private"},{"中文",g?"群聊":"私聊"},{"大写",g?"GROUP":"PRIVATE"},{"代码",g?"g":"p"},{"作用域",(g?"group":"private")+std::string(":")+id},{"Bot",bot},{"Self",std::to_string(ctx.event_self_id)},{"群号",g?id:"0"},{"私聊",g?"0":id},{"会话键",bot+":"+(g?"group":"private")+":"+id},{"路由",(g?"group":"private")+std::string("/")+id}};
+        const std::vector<std::string> names = {"作用域","命名空间","会话","路由","缓存","锁","指标","统计","配置","存储","数据","接口","协议","平台","权限","群聊","私聊","频道","成员","好友","机器人","适配器","网络","端口","主机","路径","文件","目录","数据库","SQLite","INI","WebAPI","HTTP","WS","OneBot","Milky","消息","事件","通知","请求","响应","队列","线程","任务","日志","调试","监控","健康","状态","模式","类型","级别","区域","语言","时区","本地","远程","安全","Token","Key","Value","ID","Name","Code","Slug","URL","URI","Header","Body","Query","Param","Cookie","Session","Trace","Span","Audit","Rate","Limit","Retry","Timeout","Delay","Cooldown","Feature","Flag","Switch","Bool","Count","Total","Current","Default","Fallback","Prefix","Suffix","Hash","Checksum","Shard","Bucket","Node","Worker","Runtime","Build","Version","Release","Profile","Policy","Role","Group","Private","Global","Local"};
+        for (size_t i=0;i<names.size();++i) { add("环境种类" + two(static_cast<int>(i+1)), values[i%values.size()].second); add("环境" + names[i], values[i%values.size()].second); }
+        return scan_exact(text, m);
+    }
 
     static const std::unordered_map<std::string, TimeKind>& time_var_kinds() {
         static const std::unordered_map<std::string, TimeKind> vars = [] {
@@ -980,6 +1024,34 @@ private:
         return "";
     }
 
+    static std::string replace_time_exact_species(const std::string& text, const struct tm& t, std::time_t epoch) {
+        std::unordered_map<std::string, std::string> m;
+        auto add = [&](const std::string& k, const std::string& v) { m.emplace(bracketed(k), v); };
+        const std::vector<std::pair<std::string, TimeKind>> kinds = {
+            {"年", TimeKind::Year}, {"短年", TimeKind::Year2}, {"月", TimeKind::Month}, {"两位月", TimeKind::Month2},
+            {"日", TimeKind::Day}, {"两位日", TimeKind::Day2}, {"时", TimeKind::Hour}, {"两位时", TimeKind::Hour2},
+            {"分", TimeKind::Minute}, {"两位分", TimeKind::Minute2}, {"秒", TimeKind::Second}, {"两位秒", TimeKind::Second2},
+            {"日期", TimeKind::Date}, {"斜杠日期", TimeKind::DateSlash}, {"紧凑日期", TimeKind::DateCompact},
+            {"时间", TimeKind::Time}, {"紧凑时间", TimeKind::TimeCompact}, {"日期时间", TimeKind::DateTime},
+            {"ISO", TimeKind::IsoDate}, {"时间戳", TimeKind::Timestamp}, {"毫秒戳", TimeKind::Millis},
+            {"星期", TimeKind::WeekdayZh}, {"周几", TimeKind::WeekdayIndex}, {"ISO周", TimeKind::WeekdayIso},
+            {"年内日", TimeKind::DayOfYear}, {"年内周", TimeKind::WeekOfYear}, {"季度", TimeKind::Quarter},
+            {"闰年", TimeKind::IsLeap}, {"月天数", TimeKind::DaysInMonth}, {"12时", TimeKind::Hour12},
+            {"上下午", TimeKind::AmPm}, {"月名", TimeKind::MonthNameZh}, {"季节", TimeKind::SeasonZh},
+            {"年月", TimeKind::YearMonth}, {"月日", TimeKind::MonthDay}, {"时区", TimeKind::TimeZoneName},
+            {"纪元天", TimeKind::EpochDay}
+        };
+        const std::vector<std::string> names = {
+            "标准","短","长","紧凑","斜杠","中文","英文","数字","补零","ISO","Unix","文件名","日志","缓存","分区","统计","显示","标题","路径","键","值","前缀","后缀","范围","开始","结束","当前","本地","系统","日历","农历兼容","季度","季节","工作日","周末","上午","下午","午夜","正午","小时","分钟","秒钟","毫秒","日期","时间","年月","月日","年周","年日","月初","月末","周初","周末点","昨天键","今天键","明天键","昨天显示","今天显示","明天显示","排序","索引","序号","批次","窗口","过期","冷却","延迟","超时","重试","TTL","Cron","计划","任务","事件","消息","会话","审计","追踪","指标","报表","备份","归档","版本","构建","发布","时区","UTC","本地化","区域","语言","格式A","格式B","格式C","格式D","格式E","格式F","格式G","格式H","格式I","格式J","安全","Raw","Pretty","Compact","Human","Machine","Key","Tick","Slot","Frame","Cycle","Nonce"
+        };
+        for (size_t i = 0; i < names.size(); ++i) {
+            auto kv = kinds[i % kinds.size()];
+            add("时间种类" + two(static_cast<int>(i + 1)), time_value(kv.second, t, epoch));
+            add("时间" + names[i], time_value(kv.second, t, epoch));
+        }
+        return scan_exact(text, m);
+    }
+
     std::string pick(const std::vector<std::string>& v) const { return v[std::uniform_int_distribution<size_t>(0, v.size() - 1)(m_rng)]; }
 
     static const std::unordered_map<std::string, RandomKind>& random_var_kinds() {
@@ -1073,6 +1145,24 @@ private:
         return "";
     }
 
+
+    std::string replace_random_exact_species(const std::string& text) const {
+        std::unordered_map<std::string, std::string> m;
+        auto add = [&](const std::string& k, const std::string& v){ m.emplace(bracketed(k), v); };
+        const std::vector<RandomKind> kinds = {RandomKind::Lower,RandomKind::Upper,RandomKind::Letter,RandomKind::Digit,RandomKind::Hex,RandomKind::Bool,RandomKind::Sign,RandomKind::Percent,RandomKind::Byte,RandomKind::Port,RandomKind::HttpStatus,RandomKind::Dice6,RandomKind::Dice20,RandomKind::Coin,RandomKind::Color,RandomKind::Animal,RandomKind::Weather,RandomKind::Direction,RandomKind::Rarity,RandomKind::Emoji,RandomKind::Face,RandomKind::Food,RandomKind::Drink,RandomKind::Fruit,RandomKind::Flower,RandomKind::Planet,RandomKind::Element,RandomKind::ClassName,RandomKind::Job,RandomKind::Mood,RandomKind::Greeting,RandomKind::Protocol,RandomKind::Method,RandomKind::Mime,RandomKind::FileExt,RandomKind::Language,RandomKind::Country,RandomKind::Province,RandomKind::Zodiac,RandomKind::CnZodiac,RandomKind::Uuid8,RandomKind::Uuid16,RandomKind::Token12,RandomKind::Password8,RandomKind::Base36,RandomKind::Binary,RandomKind::Octal,RandomKind::PrimeUnder100,RandomKind::Odd,RandomKind::Even,RandomKind::Hour,RandomKind::Minute,RandomKind::Second,RandomKind::Month,RandomKind::Day,RandomKind::Weekday,RandomKind::Quarter,RandomKind::Http2xx,RandomKind::Http4xx,RandomKind::Http5xx,RandomKind::ApiVerb,RandomKind::LogLevel,RandomKind::Status,RandomKind::Switch,RandomKind::Permission,RandomKind::BooleanZh,RandomKind::YesNo,RandomKind::OnOff,RandomKind::Severity,RandomKind::MilkyWord,RandomKind::OneBotWord,RandomKind::CuteSuffix,RandomKind::MagicWord,RandomKind::CardSuit,RandomKind::Tarot,RandomKind::MusicNote,RandomKind::Arrow,RandomKind::Bracket,RandomKind::Operator,RandomKind::Comparator,RandomKind::Unit,RandomKind::Currency,RandomKind::TimeUnit,RandomKind::SizeUnit,RandomKind::Locale,RandomKind::TimeZone,RandomKind::Encoding,RandomKind::HashAlgo,RandomKind::SqlType,RandomKind::JsonType,RandomKind::ConfigKey,RandomKind::EnvKey,RandomKind::Header,RandomKind::UserAgent,RandomKind::SafeChar,RandomKind::Kana,RandomKind::Number0To9,RandomKind::Number1To100};
+        const std::vector<std::string> names = {"小写","大写","字母","数字","十六进制","布尔","正负","百分比","字节","端口","HTTP状态","D6","D20","硬币","颜色","动物","天气","方向","稀有度","Emoji","颜文字","食物","饮料","水果","花","行星","元素","职业类","职业","心情","问候","协议","方法","MIME","扩展名","语言","国家","省份","星座","生肖","UUID8","UUID16","Token12","密码8","Base36","二进制","八进制","质数","奇数","偶数","小时","分钟","秒","月份","日期日","星期","季度","2xx","4xx","5xx","API动词","日志级别","状态","开关","权限","中文布尔","是否","OnOff","严重度","Milky词","OneBot词","可爱后缀","魔法词","花色","塔罗","音符","箭头","括号","运算符","比较符","单位","货币","时间单位","容量单位","区域","时区","编码","哈希","SQL类型","JSON类型","配置键","环境键","HTTP头","UA","安全字符","假名","0到9","1到100","批次号","票据","盐值","Nonce","Trace","Span","Shard","Bucket","Node","Worker"};
+        for (size_t i=0;i<names.size();++i) { add("随机种类" + two(static_cast<int>(i+1)), random_value(kinds[i%kinds.size()])); add("随机" + names[i], random_value(kinds[i%kinds.size()])); }
+        return scan_exact(text, m);
+    }
+
+    static std::string replace_parametric_exact_species(const std::string& text) {
+        std::unordered_map<std::string, std::string> m;
+        auto add = [&](const std::string& k, const std::string& v){ m.emplace(bracketed(k), v); };
+        const std::vector<std::string> names = {"数字","数值","原样","两位","三位","四位","百分","千分","负数","正数","绝对值","平方","立方","双倍","一半","加一","减一","十六进制","八进制","二进制","端口","HTTP","状态码","摄氏","华氏","开尔文","毫秒","秒数","分钟","小时","天数","周数","KB","MB","GB","TB","KiB","MiB","GiB","字节","比特","百分号","像素","em","rem","角度","弧度","米","千米","厘米","毫米","克","千克","人民币","美元","欧元","日元","布尔01","布尔中文","是否","开关","成功失败","允许拒绝","JSON数","CSV格","双引","单引","圆括号","方括号","花括号","尖括号","URL路径","查询值","头值","环境名","配置名","键名","大写标签","小写标签","蛇形标签","短横标签","点标签","冒号标签","艾特","话题","HTMLID","CSS类","SQL限制","SQL偏移","页码","每页","重试","超时","延迟","冷却","权重","分数","等级","排名","数量","索引","行号","列号","行","宽","高","红","绿","蓝","透明","色相","版本号","构建号","种子"};
+        for (size_t i=0;i<names.size();++i) add("工具种类" + two(static_cast<int>(i+1)), names[i]);
+        return scan_exact(text, m);
+    }
+
     static const std::vector<std::pair<std::string, ParamUtilityKind>>& parametric_utility_prefixes() {
         static const std::vector<std::pair<std::string, ParamUtilityKind>> p = {
             {"数字",ParamUtilityKind::Identity},{"数值",ParamUtilityKind::Identity},{"原样",ParamUtilityKind::Identity},{"两位",ParamUtilityKind::Pad2},{"三位",ParamUtilityKind::Pad3},{"四位",ParamUtilityKind::Pad4},{"百分",ParamUtilityKind::Percent},{"千分",ParamUtilityKind::Permille},{"负数",ParamUtilityKind::Negative},{"正数",ParamUtilityKind::Positive},{"绝对值",ParamUtilityKind::Abs},{"平方",ParamUtilityKind::Square},{"立方",ParamUtilityKind::Cube},{"双倍",ParamUtilityKind::DoubleValue},{"一半",ParamUtilityKind::Half},{"加一",ParamUtilityKind::Inc},{"减一",ParamUtilityKind::Dec},{"十六进制",ParamUtilityKind::Hex},{"八进制",ParamUtilityKind::Oct},{"二进制",ParamUtilityKind::Bin},{"端口",ParamUtilityKind::Port},{"HTTP",ParamUtilityKind::Http},{"状态码",ParamUtilityKind::StatusCode},{"摄氏",ParamUtilityKind::Celsius},{"华氏",ParamUtilityKind::Fahrenheit},{"开尔文",ParamUtilityKind::Kelvin},{"毫秒",ParamUtilityKind::Ms},{"秒数",ParamUtilityKind::Sec},{"分钟",ParamUtilityKind::Min},{"小时",ParamUtilityKind::Hour},{"天数",ParamUtilityKind::Day},{"周数",ParamUtilityKind::Week},{"KB",ParamUtilityKind::KB},{"MB",ParamUtilityKind::MB},{"GB",ParamUtilityKind::GB},{"TB",ParamUtilityKind::TB},{"KiB",ParamUtilityKind::Kib},{"MiB",ParamUtilityKind::Mib},{"GiB",ParamUtilityKind::Gib},{"字节",ParamUtilityKind::Bytes},{"比特",ParamUtilityKind::Bits},{"百分号",ParamUtilityKind::PercentSign},{"像素",ParamUtilityKind::Px},{"em",ParamUtilityKind::Em},{"rem",ParamUtilityKind::Rem},{"角度",ParamUtilityKind::Deg},{"弧度",ParamUtilityKind::Radian},{"米",ParamUtilityKind::Meter},{"千米",ParamUtilityKind::Kilometer},{"厘米",ParamUtilityKind::Centimeter},{"毫米",ParamUtilityKind::Millimeter},{"克",ParamUtilityKind::Gram},{"千克",ParamUtilityKind::Kilogram},{"人民币",ParamUtilityKind::Yuan},{"美元",ParamUtilityKind::Dollar},{"欧元",ParamUtilityKind::Euro},{"日元",ParamUtilityKind::Yen},{"布尔01",ParamUtilityKind::Bool01},{"布尔中文",ParamUtilityKind::BoolCN},{"是否",ParamUtilityKind::YesNo},{"开关",ParamUtilityKind::OnOff},{"成功失败",ParamUtilityKind::SuccessFail},{"允许拒绝",ParamUtilityKind::AllowDeny},{"JSON数",ParamUtilityKind::JsonNumber},{"CSV格",ParamUtilityKind::CsvCell},{"双引",ParamUtilityKind::Quote},{"单引",ParamUtilityKind::SingleQuote},{"圆括号",ParamUtilityKind::Paren},{"方括号",ParamUtilityKind::Bracket},{"花括号",ParamUtilityKind::Brace},{"尖括号",ParamUtilityKind::Angle},{"URL路径",ParamUtilityKind::UrlPath},{"查询值",ParamUtilityKind::QueryValue},{"头值",ParamUtilityKind::HeaderValue},{"环境名",ParamUtilityKind::EnvName},{"配置名",ParamUtilityKind::ConfigName},{"键名",ParamUtilityKind::KeyName},{"大写标签",ParamUtilityKind::UpperTag},{"小写标签",ParamUtilityKind::LowerTag},{"蛇形标签",ParamUtilityKind::SnakeTag},{"短横标签",ParamUtilityKind::KebabTag},{"点标签",ParamUtilityKind::DottedTag},{"冒号标签",ParamUtilityKind::ColonTag},{"艾特",ParamUtilityKind::AtUser},{"话题",ParamUtilityKind::SharpTag},{"HTMLID",ParamUtilityKind::HtmlId},{"CSS类",ParamUtilityKind::CssClass},{"SQL限制",ParamUtilityKind::SqlLimit},{"SQL偏移",ParamUtilityKind::SqlOffset},{"页码",ParamUtilityKind::Page},{"每页",ParamUtilityKind::PageSize},{"重试",ParamUtilityKind::Retry},{"超时",ParamUtilityKind::Timeout},{"延迟",ParamUtilityKind::Delay},{"冷却",ParamUtilityKind::Cooldown},{"权重",ParamUtilityKind::Weight},{"分数",ParamUtilityKind::Score},{"等级",ParamUtilityKind::Level},{"排名",ParamUtilityKind::Rank},{"数量",ParamUtilityKind::Count},{"索引",ParamUtilityKind::Index},{"行号",ParamUtilityKind::Line},{"列号",ParamUtilityKind::Column},{"行",ParamUtilityKind::Row},{"宽",ParamUtilityKind::Width},{"高",ParamUtilityKind::Height},{"红",ParamUtilityKind::Red},{"绿",ParamUtilityKind::Green},{"蓝",ParamUtilityKind::Blue},{"透明",ParamUtilityKind::Alpha},{"色相",ParamUtilityKind::HslHue},{"版本号",ParamUtilityKind::Version},{"构建号",ParamUtilityKind::Build},{"种子",ParamUtilityKind::Seed}
@@ -1137,15 +1227,16 @@ private:
     // 参数化工具族：100+ 前缀族，一次 token 扫描解析常见 数值/单位/格式 模板。
     static std::string replace_generated_utility_vars(const std::string& text) {
         if (text.find('[') == std::string::npos) return text;
+        std::string expanded = replace_parametric_exact_species(text);
         const auto& prefixes = parametric_utility_prefixes();
         std::string out;
-        out.reserve(text.size());
+        out.reserve(expanded.size());
         bool changed = false;
-        for (size_t i = 0; i < text.size();) {
-            if (text[i] != '[') { out.push_back(text[i++]); continue; }
-            size_t end = text.find(']', i + 1);
-            if (end == std::string::npos) { out.append(text, i, std::string::npos); break; }
-            std::string body = text.substr(i + 1, end - i - 1);
+        for (size_t i = 0; i < expanded.size();) {
+            if (expanded[i] != '[') { out.push_back(expanded[i++]); continue; }
+            size_t end = expanded.find(']', i + 1);
+            if (end == std::string::npos) { out.append(expanded, i, std::string::npos); break; }
+            std::string body = expanded.substr(i + 1, end - i - 1);
             bool hit = false;
             for (const auto& [prefix, kind] : prefixes) {
                 if (body.rfind(prefix, 0) != 0) continue;
@@ -1154,10 +1245,10 @@ private:
                 hit = true;
                 break;
             }
-            if (!hit) out.append(text, i, end - i + 1);
+            if (!hit) out.append(expanded, i, end - i + 1);
             i = end + 1;
         }
-        return changed ? out : text;
+        return changed ? out : expanded;
     }
 
     static size_t utility_family_count() {
