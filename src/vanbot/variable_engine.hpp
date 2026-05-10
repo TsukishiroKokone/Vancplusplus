@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cmath>
 #include <unordered_set>
+#include <unordered_map>
 #include <functional>
 #include <optional>
 #include <cctype>
@@ -321,7 +322,8 @@ public:
         result = replace_all(result, "[平台]", "Linux");
     #endif
         (void)ctx;
-        result = replace_all(result, "[变量数量]", "520+");
+        result = replace_all(result, "[变量数量]", std::to_string(utility_family_count()) + "+");
+        result = replace_all(result, "[变量族数量]", std::to_string(utility_family_count()) + "+");
         result = replace_all(result, "[嵌套层数]", "52");
         result = replace_all(result, "[目标延迟]", "5ms");
         result = replace_all(result, "[版本]", "3.0.0");
@@ -348,42 +350,9 @@ public:
         return result;
     }
 
-    // ── 实用别名与常量包：覆盖日期格式、布尔、HTTP、MIME、单位等高频场景 ───
+    // ── 520+ 实用变量族：用一次 token 扫描 + 哈希表查询，避免 520 次全量 replace ──
     static std::string replace_alias_pack_vars(const std::string& text) {
-        if (text.find('[') == std::string::npos) return text;
-        std::string result = text;
-        static const std::vector<std::pair<std::string, std::string>> aliases = {
-            {"[布尔真]", "true"}, {"[布尔假]", "false"}, {"[开启]", "on"}, {"[关闭]", "off"},
-            {"[成功]", "success"}, {"[失败]", "failed"}, {"[允许]", "allow"}, {"[拒绝]", "deny"},
-            {"[空格]", " "}, {"[双引号]", "\""}, {"[单引号]", "'"}, {"[等号]", "="},
-            {"[加号]", "+"}, {"[减号]", "-"}, {"[星号]", "*"}, {"[竖线]", "|"},
-            {"[下划线]", "_"}, {"[短横线]", "-"}, {"[井号]", "#"}, {"[问号]", "?"},
-            {"[感叹号]", "!"}, {"[百分号]", "%"}, {"[与号]", "&"}, {"[小于号]", "<"}, {"[大于号]", ">"},
-            {"[HTTP200]", "OK"}, {"[HTTP201]", "Created"}, {"[HTTP204]", "No Content"},
-            {"[HTTP301]", "Moved Permanently"}, {"[HTTP302]", "Found"}, {"[HTTP400]", "Bad Request"},
-            {"[HTTP401]", "Unauthorized"}, {"[HTTP403]", "Forbidden"}, {"[HTTP404]", "Not Found"},
-            {"[HTTP429]", "Too Many Requests"}, {"[HTTP500]", "Internal Server Error"}, {"[HTTP502]", "Bad Gateway"},
-            {"[MIME文本]", "text/plain"}, {"[MIMEHTML]", "text/html"}, {"[MIMEJSON]", "application/json"},
-            {"[MIME表单]", "application/x-www-form-urlencoded"}, {"[MIME二进制]", "application/octet-stream"},
-            {"[单位B]", "B"}, {"[单位KB]", "KB"}, {"[单位MB]", "MB"}, {"[单位GB]", "GB"},
-            {"[颜色红HEX]", "#ff4d4f"}, {"[颜色粉HEX]", "#ffadd2"}, {"[颜色橙HEX]", "#ffa940"},
-            {"[颜色黄HEX]", "#fadb14"}, {"[颜色绿HEX]", "#52c41a"}, {"[颜色蓝HEX]", "#1677ff"},
-            {"[颜色紫HEX]", "#722ed1"}, {"[颜色黑HEX]", "#000000"}, {"[颜色白HEX]", "#ffffff"},
-            {"[可爱心]", "♡"}, {"[实心心]", "♥"}, {"[星星]", "☆"}, {"[实心星]", "★"},
-            {"[音符]", "♪"}, {"[花花]", "🌸"}, {"[猫爪]", "🐾"}, {"[猫猫头]", "ฅ"},
-            {"[早安]", "早安"}, {"[午安]", "午安"}, {"[晚安]", "晚安"}, {"[你好]", "你好"},
-            {"[谢谢]", "谢谢"}, {"[抱歉]", "抱歉"}, {"[收到]", "收到"}, {"[完成]", "完成"},
-            {"[状态正常]", "normal"}, {"[状态警告]", "warning"}, {"[状态错误]", "error"}, {"[状态未知]", "unknown"},
-            {"[级别调试]", "debug"}, {"[级别信息]", "info"}, {"[级别警告]", "warn"}, {"[级别错误]", "error"},
-            {"[方法GET]", "GET"}, {"[方法POST]", "POST"}, {"[方法PUT]", "PUT"}, {"[方法DELETE]", "DELETE"},
-            {"[头JSON]", "Content-Type: application/json"}, {"[头文本]", "Content-Type: text/plain"},
-            {"[本地地址]", "127.0.0.1"}, {"[全局监听]", "0.0.0.0"}, {"[默认端口]", "8080"},
-            {"[UTF8]", "UTF-8"}, {"[CRLF]", "\r\n"}, {"[LF]", "\n"}, {"[TAB]", "\t"}
-        };
-        for (const auto& [key, value] : aliases) {
-            if (result.find(key) != std::string::npos) result = replace_all(result, key, value);
-        }
-        return result;
+        return replace_large_family_vars(text);
     }
 
     // ── 格式化变量 ──────────────────────────────────────────
@@ -669,9 +638,9 @@ private:
 
     static std::string cq_escape(const std::string& value) {
         std::string out = value;
-        out = replace_all(out, "&", "&");
-        out = replace_all(out, "[", "[");
-        out = replace_all(out, "]", "]");
+        out = replace_all(out, "&", "&amp;");
+        out = replace_all(out, "[", "&#91;");
+        out = replace_all(out, "]", "&#93;");
         out = replace_all(out, ",", "&#44;");
         return out;
     }
@@ -718,7 +687,36 @@ private:
         return out.empty() ? input : out;
     }
 
-    // 生成型变量族本身提供 520+ 实用变量：数字/两位/百分/HTTP/端口/KB/MB/GB。
+    static std::string replace_large_family_vars(const std::string& text) {
+        if (text.find('[') == std::string::npos) return text;
+        const auto& vars = utility_exact_vars();
+        std::string out;
+        out.reserve(text.size());
+        bool changed = false;
+        for (size_t i = 0; i < text.size();) {
+            if (text[i] != '[') {
+                out.push_back(text[i++]);
+                continue;
+            }
+            size_t end = text.find(']', i + 1);
+            if (end == std::string::npos) {
+                out.append(text, i, std::string::npos);
+                break;
+            }
+            std::string token = text.substr(i, end - i + 1);
+            auto found = vars.find(token);
+            if (found != vars.end()) {
+                out += found->second;
+                changed = true;
+            } else {
+                out += token;
+            }
+            i = end + 1;
+        }
+        return changed ? out : text;
+    }
+
+    // 少量参数化工具族：这些是“族模板”；520+ 的统计由 utility_exact_vars() 中的不同固定变量族提供。
     static std::string replace_generated_utility_vars(const std::string& text) {
         if (text.find('[') == std::string::npos) return text;
         std::string result = text;
@@ -739,6 +737,71 @@ private:
             return std::to_string(value);
         });
         return result;
+    }
+
+    static size_t utility_family_count() {
+        return utility_exact_vars().size();
+    }
+
+    static const std::unordered_map<std::string, std::string>& utility_exact_vars() {
+        static const std::unordered_map<std::string, std::string> vars = [] {
+            std::unordered_map<std::string, std::string> m;
+            auto add = [&](const std::string& key, const std::string& value) { m.emplace("[" + key + "]", value); };
+            auto add_same = [&](const std::vector<std::string>& names) { for (const auto& name : names) add(name, name); };
+            auto add_prefixed_same = [&](const std::string& prefix, const std::vector<std::string>& names) { for (const auto& name : names) add(prefix + name, name); };
+
+            add("布尔真", "true"); add("布尔假", "false"); add("开启", "on"); add("关闭", "off");
+            add("成功", "success"); add("失败", "failed"); add("允许", "allow"); add("拒绝", "deny");
+            add("空格", " "); add("双引号", "\""); add("单引号", "'"); add("等号", "="); add("加号", "+"); add("减号", "-"); add("星号", "*"); add("竖线", "|");
+            add("下划线", "_"); add("短横线", "-"); add("井号", "#"); add("问号", "?"); add("感叹号", "!"); add("百分号", "%"); add("与号", "&"); add("小于号", "<"); add("大于号", ">");
+            add("UTF8", "UTF-8"); add("CRLF", "\r\n"); add("LF", "\n"); add("TAB", "\t"); add("本地地址", "127.0.0.1"); add("全局监听", "0.0.0.0"); add("默认端口", "8080");
+
+            const std::vector<std::pair<int, std::string>> http = {{100,"Continue"},{101,"Switching Protocols"},{102,"Processing"},{103,"Early Hints"},{200,"OK"},{201,"Created"},{202,"Accepted"},{203,"Non-Authoritative Information"},{204,"No Content"},{205,"Reset Content"},{206,"Partial Content"},{207,"Multi-Status"},{208,"Already Reported"},{226,"IM Used"},{300,"Multiple Choices"},{301,"Moved Permanently"},{302,"Found"},{303,"See Other"},{304,"Not Modified"},{305,"Use Proxy"},{307,"Temporary Redirect"},{308,"Permanent Redirect"},{400,"Bad Request"},{401,"Unauthorized"},{402,"Payment Required"},{403,"Forbidden"},{404,"Not Found"},{405,"Method Not Allowed"},{406,"Not Acceptable"},{407,"Proxy Authentication Required"},{408,"Request Timeout"},{409,"Conflict"},{410,"Gone"},{411,"Length Required"},{412,"Precondition Failed"},{413,"Payload Too Large"},{414,"URI Too Long"},{415,"Unsupported Media Type"},{416,"Range Not Satisfiable"},{417,"Expectation Failed"},{418,"I'm a teapot"},{421,"Misdirected Request"},{422,"Unprocessable Entity"},{423,"Locked"},{424,"Failed Dependency"},{425,"Too Early"},{426,"Upgrade Required"},{428,"Precondition Required"},{429,"Too Many Requests"},{431,"Request Header Fields Too Large"},{451,"Unavailable For Legal Reasons"},{500,"Internal Server Error"},{501,"Not Implemented"},{502,"Bad Gateway"},{503,"Service Unavailable"},{504,"Gateway Timeout"},{505,"HTTP Version Not Supported"},{506,"Variant Also Negotiates"},{507,"Insufficient Storage"},{508,"Loop Detected"},{510,"Not Extended"},{511,"Network Authentication Required"}};
+            for (const auto& [code, phrase] : http) { add("HTTP" + std::to_string(code), phrase); add("HTTP码" + std::to_string(code), std::to_string(code)); }
+
+            const std::vector<std::pair<std::string, std::string>> mime = {{"文本","text/plain"},{"HTML","text/html"},{"CSS","text/css"},{"CSV","text/csv"},{"XML","application/xml"},{"JSON","application/json"},{"NDJSON","application/x-ndjson"},{"JS","application/javascript"},{"表单","application/x-www-form-urlencoded"},{"二进制","application/octet-stream"},{"PDF","application/pdf"},{"ZIP","application/zip"},{"GZIP","application/gzip"},{"TAR","application/x-tar"},{"7Z","application/x-7z-compressed"},{"RAR","application/vnd.rar"},{"PNG","image/png"},{"JPG","image/jpeg"},{"JPEG","image/jpeg"},{"GIF","image/gif"},{"WEBP","image/webp"},{"SVG","image/svg+xml"},{"ICO","image/vnd.microsoft.icon"},{"MP3","audio/mpeg"},{"WAV","audio/wav"},{"OGG","audio/ogg"},{"MP4","video/mp4"},{"WEBM","video/webm"},{"Markdown","text/markdown"},{"YAML","application/yaml"},{"WASM","application/wasm"}};
+            for (const auto& [name, value] : mime) { add("MIME" + name, value); add("头" + name, "Content-Type: " + value); }
+
+            const std::vector<std::string> methods = {"GET","POST","PUT","DELETE","PATCH","HEAD","OPTIONS","TRACE","CONNECT"};
+            for (const auto& method : methods) add("方法" + method, method);
+            const std::vector<std::string> levels = {"trace","debug","info","notice","warn","warning","error","fatal","critical","off"};
+            for (const auto& level : levels) { add("级别" + level, level); add("日志" + level, level); }
+            const std::vector<std::string> statuses = {"正常","警告","错误","未知","在线","离线","连接中","重连中","启用","禁用","可用","不可用","成功","失败","等待","运行中","已停止","已暂停"};
+            add_prefixed_same("状态", statuses);
+
+            const std::vector<std::pair<std::string, std::string>> units = {{"B","B"},{"KB","KB"},{"MB","MB"},{"GB","GB"},{"TB","TB"},{"PB","PB"},{"KiB","KiB"},{"MiB","MiB"},{"GiB","GiB"},{"毫秒","ms"},{"秒","s"},{"分钟","min"},{"小时","h"},{"天","d"},{"周","week"},{"米","m"},{"千米","km"},{"厘米","cm"},{"毫米","mm"},{"克","g"},{"千克","kg"},{"摄氏度","°C"},{"华氏度","°F"},{"百分比","%"}};
+            for (const auto& [name, value] : units) add("单位" + name, value);
+            for (int port : {20,21,22,23,25,53,67,68,80,110,123,143,161,389,443,465,500,514,587,636,993,995,1433,1521,1723,1883,2049,2375,2376,3306,3389,5432,5672,5900,6379,7001,8000,8080,8081,8443,9000,9200,9300,11211,27017}) add("端口" + std::to_string(port), std::to_string(port));
+
+            const std::vector<std::pair<std::string, std::string>> colors = {{"红","#ff4d4f"},{"粉","#ffadd2"},{"玫红","#eb2f96"},{"橙","#ffa940"},{"黄","#fadb14"},{"金","#faad14"},{"绿","#52c41a"},{"青","#13c2c2"},{"蓝","#1677ff"},{"天蓝","#69c0ff"},{"紫","#722ed1"},{"黑","#000000"},{"白","#ffffff"},{"灰","#8c8c8c"},{"薄荷","#b5f5ec"},{"樱花","#ffadd2"},{"奶油","#fff7e6"},{"薰衣草","#efdbff"},{"珊瑚","#ff7a45"},{"海盐","#e6f4ff"}};
+            for (const auto& [name, hex] : colors) { add("颜色" + name + "HEX", hex); add("颜色" + name, name); }
+            const std::vector<std::pair<std::string, std::string>> emoji = {{"可爱心","♡"},{"实心心","♥"},{"星星","☆"},{"实心星","★"},{"音符","♪"},{"花花","🌸"},{"猫爪","🐾"},{"猫猫头","ฅ"},{"月亮","🌙"},{"太阳","☀"},{"云朵","☁"},{"雨伞","☂"},{"雪花","❄"},{"火花","✨"},{"皇冠","👑"},{"礼物","🎁"},{"铃铛","🔔"},{"闪电","⚡"},{"咖啡","☕"},{"蛋糕","🍰"},{"糖果","🍬"},{"樱桃","🍒"},{"猫","🐱"},{"兔","🐰"},{"狐","🦊"},{"熊猫","🐼"},{"企鹅","🐧"},{"鲸","🐳"},{"火箭","🚀"},{"机器人","🤖"}};
+            for (const auto& [name, value] : emoji) add(name, value);
+
+            add_same({"早安","午安","晚安","你好","谢谢","抱歉","收到","完成","喵","汪","啾","欸嘿","好耶","加油","辛苦了","欢迎","再见","请稍等","处理中","已记录"});
+            add_prefixed_same("星期", {"一","二","三","四","五","六","日","天"});
+            add_prefixed_same("月份", {"一月","二月","三月","四月","五月","六月","七月","八月","九月","十月","十一月","十二月"});
+            add_prefixed_same("季度", {"Q1","Q2","Q3","Q4"});
+            add_prefixed_same("方向", {"东","南","西","北","东北","东南","西北","西南","上","下","左","右","前","后"});
+
+            const std::vector<std::pair<std::string, std::string>> tz = {{"UTC","UTC"},{"上海","Asia/Shanghai"},{"东京","Asia/Tokyo"},{"首尔","Asia/Seoul"},{"香港","Asia/Hong_Kong"},{"新加坡","Asia/Singapore"},{"伦敦","Europe/London"},{"巴黎","Europe/Paris"},{"柏林","Europe/Berlin"},{"纽约","America/New_York"},{"洛杉矶","America/Los_Angeles"},{"芝加哥","America/Chicago"},{"悉尼","Australia/Sydney"},{"墨尔本","Australia/Melbourne"},{"莫斯科","Europe/Moscow"},{"迪拜","Asia/Dubai"}};
+            for (const auto& [name, value] : tz) add("时区" + name, value);
+            const std::vector<std::pair<std::string, std::string>> currencies = {{"人民币","CNY"},{"美元","USD"},{"欧元","EUR"},{"日元","JPY"},{"英镑","GBP"},{"港币","HKD"},{"台币","TWD"},{"韩元","KRW"},{"新元","SGD"},{"澳元","AUD"},{"加元","CAD"},{"瑞郎","CHF"},{"泰铢","THB"},{"卢布","RUB"},{"比特币","BTC"},{"以太坊","ETH"}};
+            for (const auto& [name, value] : currencies) { add("货币" + name, value); add("货币符号" + value, value); }
+
+            add_prefixed_same("语言", {"中文","英语","日语","韩语","法语","德语","西班牙语","葡萄牙语","俄语","阿拉伯语","印地语","越南语","泰语","意大利语","荷兰语","土耳其语","波兰语","乌克兰语","印尼语","马来语"});
+            add_prefixed_same("国家", {"中国","日本","韩国","美国","英国","法国","德国","意大利","西班牙","葡萄牙","俄罗斯","加拿大","澳大利亚","新西兰","新加坡","泰国","越南","马来西亚","印度尼西亚","印度","巴西","墨西哥","阿根廷","智利","南非","埃及","土耳其","阿联酋","沙特","瑞士","瑞典","挪威","芬兰","丹麦","荷兰","比利时","奥地利","波兰","乌克兰","希腊"});
+            add_prefixed_same("省份", {"北京","天津","上海","重庆","河北","山西","辽宁","吉林","黑龙江","江苏","浙江","安徽","福建","江西","山东","河南","湖北","湖南","广东","海南","四川","贵州","云南","陕西","甘肃","青海","台湾","内蒙古","广西","西藏","宁夏","新疆","香港","澳门"});
+            add_prefixed_same("星座", {"白羊","金牛","双子","巨蟹","狮子","处女","天秤","天蝎","射手","摩羯","水瓶","双鱼"});
+            add_prefixed_same("生肖", {"鼠","牛","虎","兔","龙","蛇","马","羊","猴","鸡","狗","猪"});
+            add_prefixed_same("稀有度", {"N","R","SR","SSR","UR","LR","EX","SP","限定","普通","稀有","史诗","传说","神话"});
+            add_prefixed_same("天气", {"晴","多云","阴","小雨","中雨","大雨","暴雨","雷阵雨","雪","雾","霾","微风","台风","彩虹"});
+            add_prefixed_same("文件扩展", {"txt","md","json","yaml","yml","ini","csv","log","html","css","js","ts","cpp","hpp","c","h","py","java","go","rs","png","jpg","gif","webp","svg","pdf","zip","7z","tar","gz"});
+            add_prefixed_same("协议名", {"HTTP","HTTPS","WS","WSS","TCP","UDP","DNS","SMTP","IMAP","POP3","SSH","SFTP","FTP","MQTT","AMQP","Redis","SQLite","OneBot11","OneBot12","Milky"});
+            add_prefixed_same("配置键", {"data_dir","self_trigger","config_tui","storage_backend","sqlite_path","web_api_enabled","web_api_host","web_api_port","web_api_token","adapter_name","adapter_type","adapter_url","adapter_port","access_token","reconnect_interval","heartbeat_interval"});
+            return m;
+        }();
+        return vars;
     }
 
     std::string replace_parametric_vars(const std::string& text, const VarContext& ctx) const {
